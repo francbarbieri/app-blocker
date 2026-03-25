@@ -25,9 +25,7 @@ class UsageRepositoryImpl(
     }
 
     override suspend fun endSession(sessionId: Long, endTime: Long) {
-        // We need the start time to compute duration, but we can compute it from the DB
-        // For simplicity, the caller should track start time or we query it
-        usageSessionDao.updateEndTime(sessionId, endTime, 0)
+        usageSessionDao.updateEndTime(sessionId, endTime)
     }
 
     override fun getSessionsForApp(

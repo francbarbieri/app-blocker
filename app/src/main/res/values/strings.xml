@@ -1,4 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">App Blocker</string>
+    <string name="add_app">Add app to block</string>
+    <string name="app_icon">App icon</string>
+    <string name="empty_state_message">No blocked apps yet.\nTap + to add one.</string>
+    <string name="select_app">Select an app to block</string>
+    <string name="loading_apps">Loading installed apps…</string>
+    <string name="block_title">This app is blocked</string>
+    <string name="go_back">Go Back</string>
+    <string name="proceed_anyway">Open anyway</string>
+    <string name="default_motivational">Take a moment. Is this how you want to spend your time?</string>
+    <string name="accessibility_service_description">App Blocker needs this permission to detect when blocked apps are opened and show a blocking screen.</string>
+    <string name="enable_accessibility_title">Enable Accessibility Service</string>
+    <string name="enable_accessibility_message">App Blocker needs the Accessibility Service to detect and block apps. Would you like to enable it now?</string>
+    <string name="enable">Enable</string>
+    <string name="later">Later</string>
+    <string name="app_removed">App removed from block list</string>
+    <string name="undo">Undo</string>
 </resources>

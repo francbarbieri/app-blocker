@@ -1,15 +1,111 @@
 package com.appblocker.service
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
+import com.appblocker.data.local.AppDatabase
+import com.appblocker.data.repository.BlockedAppRepositoryImpl
+import com.appblocker.data.repository.UsageRepositoryImpl
+import com.appblocker.domain.usecase.IsAppBlockedUseCase
+import com.appblocker.domain.usecase.RecordUsageUseCase
+import com.appblocker.presentation.BlockOverlayActivity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 class AppBlockerAccessibilityService : AccessibilityService() {
 
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private lateinit var isAppBlocked: IsAppBlockedUseCase
+    private lateinit var recordUsage: RecordUsageUseCase
+
+    private var currentTrackedPackage: String? = null
+    private var currentSessionId: Long? = null
+
+    // Don't block ourselves or the system
+    private val ignoredPackages = setOf(
+        "com.appblocker",
+        "com.android.systemui",
+        "com.android.launcher",
+        "com.android.launcher3",
+        "com.google.android.apps.nexuslauncher"
+    )
+
+    override fun onCreate() {
+        super.onCreate()
+        val database = AppDatabase.getInstance(this)
+        val blockedAppRepo = BlockedAppRepositoryImpl(
+            database.blockedAppDao(),
+            database.scheduleDao()
+        )
+        val usageRepo = UsageRepositoryImpl(
+            database.usageSessionDao(),
+            database.unblockEventDao()
+        )
+        isAppBlocked = IsAppBlockedUseCase(blockedAppRepo, usageRepo)
+        recordUsage = RecordUsageUseCase(usageRepo)
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // TODO: Detect blocked app launches and enforce rules
+        if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+
+        val packageName = event.packageName?.toString() ?: return
+
+        if (packageName in ignoredPackages) return
+
+        // Track when user leaves a blocked app
+        if (packageName != currentTrackedPackage) {
+            endCurrentSession()
+        }
+
+        serviceScope.launch {
+            val blocked = isAppBlocked(packageName)
+            if (blocked) {
+                // Start tracking this usage session
+                if (currentTrackedPackage != packageName) {
+                    currentTrackedPackage = packageName
+                    currentSessionId = recordUsage.startSession(packageName)
+                }
+                launchBlockOverlay(packageName)
+            }
+        }
+    }
+
+    private fun launchBlockOverlay(packageName: String) {
+        // Try to get a friendly app name
+        val appName = try {
+            val appInfo = packageManager.getApplicationInfo(packageName, 0)
+            packageManager.getApplicationLabel(appInfo).toString()
+        } catch (_: Exception) {
+            packageName
+        }
+
+        val intent = Intent(this, BlockOverlayActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(BlockOverlayActivity.EXTRA_PACKAGE_NAME, packageName)
+            putExtra(BlockOverlayActivity.EXTRA_APP_NAME, appName)
+        }
+        startActivity(intent)
+    }
+
+    private fun endCurrentSession() {
+        val sessionId = currentSessionId ?: return
+        serviceScope.launch {
+            recordUsage.endSession(sessionId)
+        }
+        currentTrackedPackage = null
+        currentSessionId = null
     }
 
     override fun onInterrupt() {
-        // TODO: Handle service interruption
+        endCurrentSession()
+    }
+
+    override fun onDestroy() {
+        endCurrentSession()
+        serviceScope.cancel()
+        super.onDestroy()
     }
 }

@@ -12,8 +12,8 @@ interface UsageSessionDao {
     @Insert
     suspend fun insert(session: UsageSessionEntity): Long
 
-    @Query("UPDATE usage_sessions SET end_time = :endTime, duration_ms = :durationMs WHERE id = :sessionId")
-    suspend fun updateEndTime(sessionId: Long, endTime: Long, durationMs: Long)
+    @Query("UPDATE usage_sessions SET end_time = :endTime, duration_ms = :endTime - start_time WHERE id = :sessionId")
+    suspend fun updateEndTime(sessionId: Long, endTime: Long)
 
     @Query(
         """SELECT * FROM usage_sessions
