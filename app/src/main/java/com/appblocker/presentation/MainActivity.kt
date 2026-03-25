@@ -43,7 +43,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupToolbar() {
-        setSupportActionBar(findViewById(R.id.toolbar))
+        // Theme already provides ActionBar, no need to set support toolbar
     }
 
     private fun setupRecyclerView() {

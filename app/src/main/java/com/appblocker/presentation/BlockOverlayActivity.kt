@@ -84,5 +84,6 @@ class BlockOverlayActivity : AppCompatActivity() {
     @Deprecated("Use OnBackPressedCallback instead")
     override fun onBackPressed() {
         goHome()
+        super.onBackPressed()
     }
 }
