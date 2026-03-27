@@ -1,21 +1,25 @@
 package com.appblocker.presentation
 
+import android.content.Intent
 import android.os.Bundle
-import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
-import com.appblocker.R
+import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.compose.setContent
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.appblocker.data.local.AppDatabase
 import com.appblocker.data.repository.MotivationalMessageRepositoryImpl
 import com.appblocker.data.repository.UsageRepositoryImpl
-import com.appblocker.domain.model.UnblockEvent
 import com.appblocker.domain.usecase.GetMotivationalMessageUseCase
 import com.appblocker.domain.usecase.RecordUsageUseCase
-import com.google.android.material.button.MaterialButton
+import com.appblocker.presentation.screen.BlockOverlayScreen
+import com.appblocker.presentation.theme.AppBlockerTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-class BlockOverlayActivity : AppCompatActivity() {
+class BlockOverlayActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_PACKAGE_NAME = "extra_package_name"
@@ -25,9 +29,10 @@ class BlockOverlayActivity : AppCompatActivity() {
     private lateinit var recordUsage: RecordUsageUseCase
     private lateinit var getMotivationalMessage: GetMotivationalMessageUseCase
 
+    private var motivationalMessage by mutableStateOf("")
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_block_overlay)
 
         val blockedPackage = intent.getStringExtra(EXTRA_PACKAGE_NAME) ?: run {
             finish()
@@ -43,47 +48,50 @@ class BlockOverlayActivity : AppCompatActivity() {
             MotivationalMessageRepositoryImpl(database.motivationalMessageDao())
         )
 
-        findViewById<TextView>(R.id.blockedAppName).text = appName
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                goHome()
+            }
+        })
 
         loadMotivationalMessage(blockedPackage)
 
-        findViewById<MaterialButton>(R.id.goBackButton).setOnClickListener {
-            CoroutineScope(Dispatchers.IO).launch {
-                recordUsage.recordUnblock(blockedPackage, userProceeded = false)
+        setContent {
+            AppBlockerTheme {
+                BlockOverlayScreen(
+                    appName = appName,
+                    motivationalMessage = motivationalMessage,
+                    onGoBack = {
+                        CoroutineScope(Dispatchers.IO).launch {
+                            recordUsage.recordUnblock(blockedPackage, userProceeded = false)
+                        }
+                        goHome()
+                    },
+                    onProceedAnyway = {
+                        CoroutineScope(Dispatchers.IO).launch {
+                            recordUsage.recordUnblock(blockedPackage, userProceeded = true)
+                        }
+                        finish()
+                    },
+                )
             }
-            goHome()
-        }
-
-        findViewById<MaterialButton>(R.id.proceedButton).setOnClickListener {
-            CoroutineScope(Dispatchers.IO).launch {
-                recordUsage.recordUnblock(blockedPackage, userProceeded = true)
-            }
-            finish()
         }
     }
 
     private fun loadMotivationalMessage(packageName: String) {
         CoroutineScope(Dispatchers.IO).launch {
             val message = getMotivationalMessage(packageName)
-            val text = message?.message ?: getString(R.string.default_motivational)
-            runOnUiThread {
-                findViewById<TextView>(R.id.motivationalMessage).text = text
-            }
+            motivationalMessage = message?.message ?: "You've got this! Stay focused."
         }
     }
 
     private fun goHome() {
-        val homeIntent = android.content.Intent(android.content.Intent.ACTION_MAIN).apply {
-            addCategory(android.content.Intent.CATEGORY_HOME)
-            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_HOME)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
         startActivity(homeIntent)
         finish()
     }
 
-    @Deprecated("Use OnBackPressedCallback instead")
-    override fun onBackPressed() {
-        goHome()
-        super.onBackPressed()
-    }
 }
