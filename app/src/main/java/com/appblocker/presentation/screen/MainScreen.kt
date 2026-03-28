@@ -24,15 +24,11 @@ import androidx.compose.material.icons.filled.Block
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -64,7 +60,8 @@ import kotlinx.coroutines.withContext
 
 /**
  * Stateful MainScreen that owns the ViewModel and collects its state.
- * This is the entry point used by MainActivity.
+ * Now serves as the Apps tab content — no Scaffold or TopAppBar of its own.
+ * Includes a FAB overlay and the app picker bottom sheet.
  */
 @Composable
 fun MainScreen(
@@ -97,39 +94,56 @@ fun MainScreen(
     var isPickerLoading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    MainScreenContent(
-        blockedApps = blockedApps,
-        isLoading = isLoading,
-        showAccessibilityBanner = !isAccessibilityEnabled && !accessibilityPromptDismissed,
-        onEnableAccessibility = {
-            context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        },
-        onDismissAccessibilityBanner = {
-            accessibilityPromptDismissed = true
-            val prefs = context.getSharedPreferences(
-                "${context.packageName}_preferences", Context.MODE_PRIVATE
-            )
-            prefs.edit().putBoolean("accessibility_prompt_dismissed", true).apply()
-        },
-        onToggle = { packageName, enabled ->
-            viewModel.toggleAppBlocking(packageName, enabled)
-        },
-        onDelete = { packageName ->
-            viewModel.removeApp(packageName)
-        },
-        onAddClick = {
-            showAppPicker = true
-            isPickerLoading = true
-            scope.launch {
-                val apps = withContext(Dispatchers.IO) {
-                    loadInstalledApps(context, blockedApps.map { it.packageName }.toSet())
-                }
-                pickerApps = apps
-                isPickerLoading = false
+    val onAddClick: () -> Unit = {
+        showAppPicker = true
+        isPickerLoading = true
+        scope.launch {
+            val apps = withContext(Dispatchers.IO) {
+                loadInstalledApps(context, blockedApps.map { it.packageName }.toSet())
             }
-        },
-        modifier = modifier,
-    )
+            pickerApps = apps
+            isPickerLoading = false
+        }
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
+        AppsScreenContent(
+            blockedApps = blockedApps,
+            isLoading = isLoading,
+            showAccessibilityBanner = !isAccessibilityEnabled && !accessibilityPromptDismissed,
+            onEnableAccessibility = {
+                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            },
+            onDismissAccessibilityBanner = {
+                accessibilityPromptDismissed = true
+                val prefs = context.getSharedPreferences(
+                    "${context.packageName}_preferences", Context.MODE_PRIVATE
+                )
+                prefs.edit().putBoolean("accessibility_prompt_dismissed", true).apply()
+            },
+            onToggle = { packageName, enabled ->
+                viewModel.toggleAppBlocking(packageName, enabled)
+            },
+            onDelete = { packageName ->
+                viewModel.removeApp(packageName)
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        FloatingActionButton(
+            onClick = onAddClick,
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Add app to block",
+            )
+        }
+    }
 
     if (showAppPicker) {
         AppPickerBottomSheet(
@@ -183,11 +197,11 @@ private fun loadInstalledApps(
 // region Stateless content
 
 /**
- * Stateless composable containing all the UI. Receives data and callbacks only.
+ * Stateless composable containing the Apps tab UI. Receives data and callbacks only.
+ * No Scaffold or TopAppBar — those are provided by AppNavigation.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreenContent(
+fun AppsScreenContent(
     blockedApps: List<BlockedApp>,
     isLoading: Boolean,
     showAccessibilityBanner: Boolean,
@@ -195,109 +209,79 @@ fun MainScreenContent(
     onDismissAccessibilityBanner: () -> Unit,
     onToggle: (packageName: String, enabled: Boolean) -> Unit,
     onDelete: (packageName: String) -> Unit,
-    onAddClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(text = "App Blocker")
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                ),
+    Column(
+        modifier = modifier.fillMaxSize(),
+    ) {
+        if (showAccessibilityBanner) {
+            AccessibilityBanner(
+                onEnable = onEnableAccessibility,
+                onDismiss = onDismissAccessibilityBanner,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = onAddClick,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Add app to block",
-                )
-            }
-        },
-        modifier = modifier,
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-        ) {
-            if (showAccessibilityBanner) {
-                AccessibilityBanner(
-                    onEnable = onEnableAccessibility,
-                    onDismiss = onDismissAccessibilityBanner,
+        }
+
+        when {
+            isLoading -> {
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                )
+                        .fillMaxSize()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
 
-            when {
-                isLoading -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .weight(1f),
-                        contentAlignment = Alignment.Center,
+            blockedApps.isEmpty() -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
                     ) {
-                        CircularProgressIndicator(
-                            color = MaterialTheme.colorScheme.primary,
+                        Icon(
+                            imageVector = Icons.Default.Block,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 16.dp),
+                        )
+                        Text(
+                            text = "No blocked apps yet.\nTap + to add one.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
                         )
                     }
                 }
+            }
 
-                blockedApps.isEmpty() -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .weight(1f),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Block,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(bottom = 16.dp),
-                            )
-                            Text(
-                                text = "No blocked apps yet.\nTap + to add one.",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                            )
-                        }
-                    }
-                }
-
-                else -> {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .weight(1f),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(
-                            items = blockedApps,
-                            key = { it.packageName },
-                        ) { app ->
-                            BlockedAppItem(
-                                app = app,
-                                onToggle = onToggle,
-                                onDelete = onDelete,
-                            )
-                        }
+            else -> {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1f),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(
+                        items = blockedApps,
+                        key = { it.packageName },
+                    ) { app ->
+                        BlockedAppItem(
+                            app = app,
+                            onToggle = onToggle,
+                            onDelete = onDelete,
+                        )
                     }
                 }
             }
@@ -370,9 +354,9 @@ private val sampleApps = listOf(
 
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
-private fun MainScreenContentPreview() {
+private fun AppsScreenContentPreview() {
     AppBlockerTheme {
-        MainScreenContent(
+        AppsScreenContent(
             blockedApps = sampleApps,
             isLoading = false,
             showAccessibilityBanner = false,
@@ -380,16 +364,15 @@ private fun MainScreenContentPreview() {
             onDismissAccessibilityBanner = {},
             onToggle = { _, _ -> },
             onDelete = {},
-            onAddClick = {},
         )
     }
 }
 
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
-private fun MainScreenContentEmptyPreview() {
+private fun AppsScreenContentEmptyPreview() {
     AppBlockerTheme {
-        MainScreenContent(
+        AppsScreenContent(
             blockedApps = emptyList(),
             isLoading = false,
             showAccessibilityBanner = true,
@@ -397,16 +380,15 @@ private fun MainScreenContentEmptyPreview() {
             onDismissAccessibilityBanner = {},
             onToggle = { _, _ -> },
             onDelete = {},
-            onAddClick = {},
         )
     }
 }
 
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
-private fun MainScreenContentLoadingPreview() {
+private fun AppsScreenContentLoadingPreview() {
     AppBlockerTheme {
-        MainScreenContent(
+        AppsScreenContent(
             blockedApps = emptyList(),
             isLoading = true,
             showAccessibilityBanner = false,
@@ -414,7 +396,6 @@ private fun MainScreenContentLoadingPreview() {
             onDismissAccessibilityBanner = {},
             onToggle = { _, _ -> },
             onDelete = {},
-            onAddClick = {},
         )
     }
 }
