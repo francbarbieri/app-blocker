@@ -59,9 +59,10 @@ fun HomeScreen(
             .padding(horizontal = 16.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        // Hero card with blocked count + app icons
+        // Hero card — only show actively blocking apps
+        val activeApps = blockedApps.filter { it.isBlockingEnabled }
         HeroSummaryCard(
-            blockedApps = blockedApps,
+            blockedApps = activeApps,
             isAccessibilityEnabled = isAccessibilityEnabled,
             onClick = onNavigateToApps,
         )
