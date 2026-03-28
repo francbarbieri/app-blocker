@@ -1,6 +1,17 @@
 package com.appblocker.presentation.screen
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,41 +25,45 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Block
-import androidx.compose.material.icons.outlined.PhoneAndroid
-import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.appblocker.presentation.theme.AppBlockerTheme
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
 
 private val pages = listOf(
     OnboardingPageData(
-        icon = Icons.Outlined.PhoneAndroid,
+        visual = OnboardingVisual.PULSE_RING,
         title = "Take back control",
         subtitle = "Your phone is a tool. Make it work for you — not against you.",
     ),
     OnboardingPageData(
-        icon = Icons.Outlined.Block,
+        visual = OnboardingVisual.SHIELD_BLOCK,
         title = "Block what distracts you",
         subtitle = "Choose the apps that steal your focus. We'll keep them out of reach.",
     ),
     OnboardingPageData(
-        icon = Icons.Outlined.Schedule,
+        visual = OnboardingVisual.CLOCK_SWEEP,
         title = "Your rules, your schedule",
         subtitle = "Set time windows or daily limits. Stay in control without going cold turkey.",
     ),
@@ -60,8 +75,36 @@ fun OnboardingScreen(
     modifier: Modifier = Modifier,
 ) {
     val pagerState = rememberPagerState(pageCount = { pages.size })
-    val scope = rememberCoroutineScope()
     val isLastPage = pagerState.currentPage == pages.lastIndex
+
+    // Track whether user has ever swiped — hide hint after first interaction
+    var hasInteracted by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        snapshotFlow { pagerState.currentPage }
+            .drop(1) // ignore initial emission
+            .collect { hasInteracted = true }
+    }
+
+    // Swipe hint animation (slides in, then fades out)
+    val showHint = !hasInteracted && pagerState.currentPage == 0
+    val hintAlpha = remember { Animatable(0f) }
+    val hintOffsetX = remember { Animatable(0f) }
+
+    LaunchedEffect(showHint) {
+        if (showHint) {
+            delay(800) // wait for page entry animations
+            hintAlpha.animateTo(1f, tween(400))
+            // Subtle slide loop
+            while (true) {
+                hintOffsetX.animateTo(8f, tween(600, easing = FastOutSlowInEasing))
+                hintOffsetX.animateTo(0f, tween(600, easing = FastOutSlowInEasing))
+                delay(1200)
+            }
+        } else {
+            hintAlpha.animateTo(0f, tween(200))
+        }
+    }
 
     Column(
         modifier = modifier
@@ -89,10 +132,13 @@ fun OnboardingScreen(
             state = pagerState,
             modifier = Modifier.weight(1f),
         ) { page ->
-            OnboardingPage(data = pages[page])
+            OnboardingPage(
+                data = pages[page],
+                isActive = pagerState.settledPage == page,
+            )
         }
 
-        // Bottom section: indicators + button
+        // Bottom section: hint + indicators + last-page CTA
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -100,22 +146,59 @@ fun OnboardingScreen(
                 .padding(bottom = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Page indicators
+            // Swipe hint
+            Text(
+                text = "Swipe \u2192",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.graphicsLayer {
+                    alpha = hintAlpha.value
+                    translationX = hintOffsetX.value.dp.toPx()
+                },
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Animated page indicators
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 repeat(pages.size) { index ->
+                    val isSelected = index == pagerState.currentPage
+
                     val color by animateColorAsState(
-                        targetValue = if (index == pagerState.currentPage) {
+                        targetValue = if (isSelected) {
                             MaterialTheme.colorScheme.primary
                         } else {
                             MaterialTheme.colorScheme.outlineVariant
                         },
-                        label = "indicator",
+                        animationSpec = tween(300),
+                        label = "dotColor",
                     )
+
+                    val scale by animateFloatAsState(
+                        targetValue = if (isSelected) 1f else 0.7f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessLow,
+                        ),
+                        label = "dotScale",
+                    )
+
+                    val width by animateFloatAsState(
+                        targetValue = if (isSelected) 24f else 8f,
+                        animationSpec = tween(300, easing = FastOutSlowInEasing),
+                        label = "dotWidth",
+                    )
+
                     Box(
                         modifier = Modifier
-                            .size(8.dp)
+                            .height(8.dp)
+                            .width(width.dp)
+                            .graphicsLayer {
+                                scaleY = scale
+                            }
                             .clip(CircleShape)
                             .background(color),
                     )
@@ -124,26 +207,30 @@ fun OnboardingScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // CTA button
-            Button(
-                onClick = {
-                    if (isLastPage) {
-                        onFinish()
-                    } else {
-                        scope.launch {
-                            pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                        }
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = MaterialTheme.shapes.large,
+            // CTA only on last page — animated entrance
+            AnimatedVisibility(
+                visible = isLastPage,
+                enter = fadeIn(tween(300)) + slideInHorizontally(
+                    initialOffsetX = { it / 4 },
+                    animationSpec = tween(300, easing = FastOutSlowInEasing),
+                ),
+                exit = fadeOut(tween(200)) + slideOutHorizontally(
+                    targetOffsetX = { -it / 4 },
+                    animationSpec = tween(200),
+                ),
             ) {
-                Text(
-                    text = if (isLastPage) "Start blocking" else "Next",
-                    style = MaterialTheme.typography.titleMedium,
-                )
+                Button(
+                    onClick = onFinish,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = MaterialTheme.shapes.large,
+                ) {
+                    Text(
+                        text = "Start blocking",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
             }
         }
     }
