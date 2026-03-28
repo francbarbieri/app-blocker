@@ -100,7 +100,7 @@ fun AppNavigation(
                 title = {
                     Text(
                         text = when (currentTab) {
-                            NavTab.Home -> "App Blocker"
+                            NavTab.Home -> "Home"
                             NavTab.Apps -> "Blocked Apps"
                             NavTab.Schedules -> "Schedules"
                         },

@@ -64,7 +64,7 @@ private val DarkColorScheme = darkColorScheme(
 
 @Composable
 fun AppBlockerTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = true,
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit,
 ) {
