@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 
 class AppBlockerAccessibilityService : AccessibilityService() {
 
@@ -24,7 +25,6 @@ class AppBlockerAccessibilityService : AccessibilityService() {
     private var currentTrackedPackage: String? = null
     private var currentSessionId: Long? = null
 
-    // Don't block ourselves or the system
     private val ignoredPackages = setOf(
         "com.appblocker",
         "com.android.systemui",
@@ -55,7 +55,8 @@ class AppBlockerAccessibilityService : AccessibilityService() {
 
         if (packageName in ignoredPackages) return
 
-        // Track when user leaves a blocked app
+        if (isInGrace(packageName)) return
+
         if (packageName != currentTrackedPackage) {
             endCurrentSession()
         }
@@ -63,7 +64,6 @@ class AppBlockerAccessibilityService : AccessibilityService() {
         serviceScope.launch {
             val blocked = isAppBlocked(packageName)
             if (blocked) {
-                // Start tracking this usage session
                 if (currentTrackedPackage != packageName) {
                     currentTrackedPackage = packageName
                     currentSessionId = recordUsage.startSession(packageName)
@@ -74,7 +74,6 @@ class AppBlockerAccessibilityService : AccessibilityService() {
     }
 
     private fun launchBlockOverlay(packageName: String) {
-        // Try to get a friendly app name
         val appName = try {
             val appInfo = packageManager.getApplicationInfo(packageName, 0)
             packageManager.getApplicationLabel(appInfo).toString()
@@ -88,6 +87,13 @@ class AppBlockerAccessibilityService : AccessibilityService() {
             putExtra(BlockOverlayActivity.EXTRA_APP_NAME, appName)
         }
         startActivity(intent)
+    }
+
+    private fun isInGrace(packageName: String): Boolean {
+        val expiry = graceUntilMs[packageName] ?: return false
+        if (System.currentTimeMillis() < expiry) return true
+        graceUntilMs.remove(packageName)
+        return false
     }
 
     private fun endCurrentSession() {
@@ -107,5 +113,15 @@ class AppBlockerAccessibilityService : AccessibilityService() {
         endCurrentSession()
         serviceScope.cancel()
         super.onDestroy()
+    }
+
+    companion object {
+        const val GRACE_PERIOD_MS: Long = 5 * 60_000L
+
+        private val graceUntilMs = ConcurrentHashMap<String, Long>()
+
+        fun grantGrace(packageName: String) {
+            graceUntilMs[packageName] = System.currentTimeMillis() + GRACE_PERIOD_MS
+        }
     }
 }
