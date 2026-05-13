@@ -30,29 +30,45 @@ class BlockOverlayViewModel(
 
     fun onBreakingPlan() {
         viewModelScope.launch {
-            val message = getMotivationalMessage(packageName)?.message
-                ?: FALLBACK_MESSAGE
+            val message = try {
+                getMotivationalMessage(packageName)?.message ?: FALLBACK_MESSAGE
+            } catch (t: Throwable) {
+                android.util.Log.w(TAG, "Failed to load motivational message for $packageName", t)
+                FALLBACK_MESSAGE
+            }
             _state.value = BlockOverlayUiState.Motivational(appName, message)
         }
     }
 
     fun onLegitimate() {
         viewModelScope.launch {
-            recordUsage.recordUnblock(packageName, UnblockOutcome.LEGITIMATE)
+            try {
+                recordUsage.recordUnblock(packageName, UnblockOutcome.LEGITIMATE)
+            } catch (t: Throwable) {
+                android.util.Log.w(TAG, "Failed to record LEGITIMATE outcome for $packageName", t)
+            }
             _events.send(BlockOverlayEvent.GrantGraceAndClose)
         }
     }
 
     fun onGoBack() {
         viewModelScope.launch {
-            recordUsage.recordUnblock(packageName, UnblockOutcome.BACKED_OFF)
+            try {
+                recordUsage.recordUnblock(packageName, UnblockOutcome.BACKED_OFF)
+            } catch (t: Throwable) {
+                android.util.Log.w(TAG, "Failed to record BACKED_OFF outcome for $packageName", t)
+            }
             _events.send(BlockOverlayEvent.GoHome)
         }
     }
 
     fun onProceed() {
         viewModelScope.launch {
-            recordUsage.recordUnblock(packageName, UnblockOutcome.BROKE_PLAN_PROCEEDED)
+            try {
+                recordUsage.recordUnblock(packageName, UnblockOutcome.BROKE_PLAN_PROCEEDED)
+            } catch (t: Throwable) {
+                android.util.Log.w(TAG, "Failed to record BROKE_PLAN_PROCEEDED outcome for $packageName", t)
+            }
             _events.send(BlockOverlayEvent.GrantGraceAndClose)
         }
     }
@@ -63,6 +79,7 @@ class BlockOverlayViewModel(
 
     companion object {
         const val FALLBACK_MESSAGE = "You've got this! Stay focused."
+        private const val TAG = "BlockOverlayViewModel"
     }
 
     class Factory(
