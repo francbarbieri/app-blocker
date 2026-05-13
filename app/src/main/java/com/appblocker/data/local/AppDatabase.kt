@@ -52,7 +52,7 @@ abstract class AppDatabase : RoomDatabase() {
                         app_package_name TEXT NOT NULL,
                         timestamp INTEGER NOT NULL,
                         outcome TEXT NOT NULL,
-                        FOREIGN KEY(app_package_name) REFERENCES blocked_apps(package_name) ON DELETE CASCADE
+                        FOREIGN KEY(app_package_name) REFERENCES blocked_apps(package_name) ON UPDATE NO ACTION ON DELETE CASCADE
                     )
                     """.trimIndent()
                 )
