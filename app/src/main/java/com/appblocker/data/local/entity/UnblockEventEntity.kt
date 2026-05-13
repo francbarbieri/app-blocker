@@ -28,6 +28,6 @@ data class UnblockEventEntity(
     @ColumnInfo(name = "timestamp")
     val timestamp: Long,
 
-    @ColumnInfo(name = "user_proceeded")
-    val userProceeded: Boolean
+    @ColumnInfo(name = "outcome")
+    val outcome: String
 )

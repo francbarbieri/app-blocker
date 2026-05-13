@@ -5,6 +5,7 @@ import com.appblocker.data.local.dao.UsageSessionDao
 import com.appblocker.data.local.entity.UnblockEventEntity
 import com.appblocker.data.local.entity.UsageSessionEntity
 import com.appblocker.domain.model.UnblockEvent
+import com.appblocker.domain.model.UnblockOutcome
 import com.appblocker.domain.model.UsageSession
 import com.appblocker.domain.repository.UsageRepository
 import kotlinx.coroutines.flow.Flow
@@ -58,10 +59,6 @@ class UsageRepositoryImpl(
         return unblockEventDao.getEventCountSince(packageName, sinceEpochMs)
     }
 
-    override suspend fun getProceededCountSince(packageName: String, sinceEpochMs: Long): Int {
-        return unblockEventDao.getProceededCountSince(packageName, sinceEpochMs)
-    }
-
     private fun UsageSessionEntity.toDomain() = UsageSession(
         id = id,
         appPackageName = appPackageName,
@@ -74,13 +71,13 @@ class UsageRepositoryImpl(
         id = id,
         appPackageName = appPackageName,
         timestamp = timestamp,
-        userProceeded = userProceeded
+        outcome = outcome.name
     )
 
     private fun UnblockEventEntity.toDomain() = UnblockEvent(
         id = id,
         appPackageName = appPackageName,
         timestamp = timestamp,
-        userProceeded = userProceeded
+        outcome = UnblockOutcome.valueOf(outcome)
     )
 }

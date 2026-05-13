@@ -1,6 +1,7 @@
 package com.appblocker.domain.usecase
 
 import com.appblocker.domain.model.UnblockEvent
+import com.appblocker.domain.model.UnblockOutcome
 import com.appblocker.domain.repository.UsageRepository
 
 class RecordUsageUseCase(private val repository: UsageRepository) {
@@ -12,11 +13,11 @@ class RecordUsageUseCase(private val repository: UsageRepository) {
         repository.endSession(sessionId, System.currentTimeMillis())
     }
 
-    suspend fun recordUnblock(packageName: String, userProceeded: Boolean) {
+    suspend fun recordUnblock(packageName: String, outcome: UnblockOutcome) {
         val event = UnblockEvent(
             appPackageName = packageName,
             timestamp = System.currentTimeMillis(),
-            userProceeded = userProceeded
+            outcome = outcome
         )
         repository.recordUnblockEvent(event)
     }

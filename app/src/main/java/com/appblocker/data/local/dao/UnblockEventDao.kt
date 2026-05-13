@@ -25,12 +25,4 @@ interface UnblockEventDao {
         AND timestamp >= :sinceEpochMs"""
     )
     suspend fun getEventCountSince(packageName: String, sinceEpochMs: Long): Int
-
-    @Query(
-        """SELECT COUNT(*) FROM unblock_events
-        WHERE app_package_name = :packageName
-        AND user_proceeded = 1
-        AND timestamp >= :sinceEpochMs"""
-    )
-    suspend fun getProceededCountSince(packageName: String, sinceEpochMs: Long): Int
 }

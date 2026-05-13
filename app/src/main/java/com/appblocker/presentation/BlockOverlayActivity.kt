@@ -12,6 +12,7 @@ import com.appblocker.data.local.AppDatabase
 import com.appblocker.data.repository.MotivationalMessageRepositoryImpl
 import com.appblocker.data.repository.UsageRepositoryImpl
 import com.appblocker.domain.usecase.GetMotivationalMessageUseCase
+import com.appblocker.domain.model.UnblockOutcome
 import com.appblocker.domain.usecase.RecordUsageUseCase
 import com.appblocker.presentation.screen.BlockOverlayScreen
 import com.appblocker.presentation.theme.AppBlockerTheme
@@ -63,13 +64,13 @@ class BlockOverlayActivity : ComponentActivity() {
                     motivationalMessage = motivationalMessage,
                     onGoBack = {
                         CoroutineScope(Dispatchers.IO).launch {
-                            recordUsage.recordUnblock(blockedPackage, userProceeded = false)
+                            recordUsage.recordUnblock(blockedPackage, UnblockOutcome.BACKED_OFF)
                         }
                         goHome()
                     },
                     onProceedAnyway = {
                         CoroutineScope(Dispatchers.IO).launch {
-                            recordUsage.recordUnblock(blockedPackage, userProceeded = true)
+                            recordUsage.recordUnblock(blockedPackage, UnblockOutcome.BROKE_PLAN_PROCEEDED)
                         }
                         finish()
                     },

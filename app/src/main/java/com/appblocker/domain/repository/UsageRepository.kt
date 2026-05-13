@@ -14,5 +14,4 @@ interface UsageRepository {
     suspend fun recordUnblockEvent(event: UnblockEvent)
     fun getUnblockEventsForApp(packageName: String): Flow<List<UnblockEvent>>
     suspend fun getUnblockEventCountSince(packageName: String, sinceEpochMs: Long): Int
-    suspend fun getProceededCountSince(packageName: String, sinceEpochMs: Long): Int
 }
