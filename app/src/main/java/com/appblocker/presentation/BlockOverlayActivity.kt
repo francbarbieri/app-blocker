@@ -5,20 +5,23 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.flowWithLifecycle
+import androidx.lifecycle.Lifecycle
 import com.appblocker.data.local.AppDatabase
 import com.appblocker.data.repository.MotivationalMessageRepositoryImpl
 import com.appblocker.data.repository.UsageRepositoryImpl
 import com.appblocker.domain.usecase.GetMotivationalMessageUseCase
-import com.appblocker.domain.model.UnblockOutcome
 import com.appblocker.domain.usecase.RecordUsageUseCase
+import com.appblocker.presentation.screen.BlockOverlayEvent
 import com.appblocker.presentation.screen.BlockOverlayScreen
+import com.appblocker.presentation.screen.BlockOverlayUiState
 import com.appblocker.presentation.theme.AppBlockerTheme
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import com.appblocker.service.AppBlockerAccessibilityService
+import kotlinx.coroutines.flow.collectLatest
 
 class BlockOverlayActivity : ComponentActivity() {
 
@@ -27,62 +30,68 @@ class BlockOverlayActivity : ComponentActivity() {
         const val EXTRA_APP_NAME = "extra_app_name"
     }
 
-    private lateinit var recordUsage: RecordUsageUseCase
-    private lateinit var getMotivationalMessage: GetMotivationalMessageUseCase
+    private lateinit var blockedPackage: String
 
-    private var motivationalMessage by mutableStateOf("")
+    private val viewModel: BlockOverlayViewModel by viewModels {
+        val database = AppDatabase.getInstance(this)
+        val recordUsage = RecordUsageUseCase(
+            UsageRepositoryImpl(database.usageSessionDao(), database.unblockEventDao())
+        )
+        val getMotivationalMessage = GetMotivationalMessageUseCase(
+            MotivationalMessageRepositoryImpl(database.motivationalMessageDao())
+        )
+        BlockOverlayViewModel.Factory(
+            packageName = blockedPackage,
+            appName = intent.getStringExtra(EXTRA_APP_NAME) ?: blockedPackage,
+            recordUsage = recordUsage,
+            getMotivationalMessage = getMotivationalMessage
+        )
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val blockedPackage = intent.getStringExtra(EXTRA_PACKAGE_NAME) ?: run {
+        blockedPackage = intent.getStringExtra(EXTRA_PACKAGE_NAME) ?: run {
             finish()
             return
         }
-        val appName = intent.getStringExtra(EXTRA_APP_NAME) ?: blockedPackage
-
-        val database = AppDatabase.getInstance(this)
-        recordUsage = RecordUsageUseCase(
-            UsageRepositoryImpl(database.usageSessionDao(), database.unblockEventDao())
-        )
-        getMotivationalMessage = GetMotivationalMessageUseCase(
-            MotivationalMessageRepositoryImpl(database.motivationalMessageDao())
-        )
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                goHome()
+                when (viewModel.state.value) {
+                    is BlockOverlayUiState.Confirmation -> goHome()
+                    is BlockOverlayUiState.Motivational -> viewModel.onBackPressedFromMotivational()
+                }
             }
         })
 
-        loadMotivationalMessage(blockedPackage)
-
         setContent {
             AppBlockerTheme {
+                val state by viewModel.state.collectAsStateWithLifecycle()
+
+                LaunchedEffect(Unit) {
+                    viewModel.events
+                        .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
+                        .collectLatest { event ->
+                            when (event) {
+                                BlockOverlayEvent.GrantGraceAndClose -> {
+                                    AppBlockerAccessibilityService.grantGrace(blockedPackage)
+                                    finish()
+                                }
+                                BlockOverlayEvent.Close -> finish()
+                                BlockOverlayEvent.GoHome -> goHome()
+                            }
+                        }
+                }
+
                 BlockOverlayScreen(
-                    appName = appName,
-                    motivationalMessage = motivationalMessage,
-                    onGoBack = {
-                        CoroutineScope(Dispatchers.IO).launch {
-                            recordUsage.recordUnblock(blockedPackage, UnblockOutcome.BACKED_OFF)
-                        }
-                        goHome()
-                    },
-                    onProceedAnyway = {
-                        CoroutineScope(Dispatchers.IO).launch {
-                            recordUsage.recordUnblock(blockedPackage, UnblockOutcome.BROKE_PLAN_PROCEEDED)
-                        }
-                        finish()
-                    },
+                    state = state,
+                    onLegitimate = viewModel::onLegitimate,
+                    onBreakingPlan = viewModel::onBreakingPlan,
+                    onGoBack = viewModel::onGoBack,
+                    onProceed = viewModel::onProceed,
                 )
             }
-        }
-    }
-
-    private fun loadMotivationalMessage(packageName: String) {
-        CoroutineScope(Dispatchers.IO).launch {
-            val message = getMotivationalMessage(packageName)
-            motivationalMessage = message?.message ?: "You've got this! Stay focused."
         }
     }
 
@@ -94,5 +103,4 @@ class BlockOverlayActivity : ComponentActivity() {
         startActivity(homeIntent)
         finish()
     }
-
 }
