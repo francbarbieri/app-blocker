@@ -13,6 +13,5 @@ sealed interface BlockOverlayUiState {
 
 sealed interface BlockOverlayEvent {
     data object GrantGraceAndClose : BlockOverlayEvent
-    data object Close : BlockOverlayEvent
     data object GoHome : BlockOverlayEvent
 }

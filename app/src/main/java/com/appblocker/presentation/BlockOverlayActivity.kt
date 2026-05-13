@@ -66,24 +66,23 @@ class BlockOverlayActivity : ComponentActivity() {
         })
 
         setContent {
-            AppBlockerTheme {
-                val state by viewModel.state.collectAsStateWithLifecycle()
+            val state by viewModel.state.collectAsStateWithLifecycle()
 
-                LaunchedEffect(Unit) {
-                    viewModel.events
-                        .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
-                        .collectLatest { event ->
-                            when (event) {
-                                BlockOverlayEvent.GrantGraceAndClose -> {
-                                    AppBlockerAccessibilityService.grantGrace(blockedPackage)
-                                    finish()
-                                }
-                                BlockOverlayEvent.Close -> finish()
-                                BlockOverlayEvent.GoHome -> goHome()
+            LaunchedEffect(Unit) {
+                viewModel.events
+                    .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
+                    .collectLatest { event ->
+                        when (event) {
+                            BlockOverlayEvent.GrantGraceAndClose -> {
+                                AppBlockerAccessibilityService.grantGrace(blockedPackage)
+                                finish()
                             }
+                            BlockOverlayEvent.GoHome -> goHome()
                         }
-                }
+                    }
+            }
 
+            AppBlockerTheme {
                 BlockOverlayScreen(
                     state = state,
                     onLegitimate = viewModel::onLegitimate,
