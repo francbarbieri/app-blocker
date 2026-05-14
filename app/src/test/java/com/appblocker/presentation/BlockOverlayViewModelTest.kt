@@ -15,6 +15,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -63,18 +64,18 @@ class BlockOverlayViewModelTest {
     @Test
     fun `countdown decrements secondsRemaining each second`() = runTest(dispatcher) {
         val (vm, _) = viewModel()
-        advanceTimeBy(1_000)
+        advanceTimeBy(1_000); runCurrent()
         assertEquals(BlockOverlayUiState.BreathingPause(appName, 4), vm.state.value)
-        advanceTimeBy(1_000)
+        advanceTimeBy(1_000); runCurrent()
         assertEquals(BlockOverlayUiState.BreathingPause(appName, 3), vm.state.value)
-        advanceTimeBy(2_000)
+        advanceTimeBy(2_000); runCurrent()
         assertEquals(BlockOverlayUiState.BreathingPause(appName, 1), vm.state.value)
     }
 
     @Test
     fun `countdown reaching zero transitions to Confirmation`() = runTest(dispatcher) {
         val (vm, _) = viewModel()
-        advanceTimeBy(5_000)
+        advanceTimeBy(5_000); runCurrent()
         assertEquals(BlockOverlayUiState.Confirmation(appName), vm.state.value)
     }
 
