@@ -59,6 +59,7 @@ class BlockOverlayActivity : ComponentActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 when (viewModel.state.value) {
+                    is BlockOverlayUiState.BreathingPause -> goHome()
                     is BlockOverlayUiState.Confirmation -> goHome()
                     is BlockOverlayUiState.Motivational -> viewModel.onBackPressedFromMotivational()
                 }
@@ -85,6 +86,7 @@ class BlockOverlayActivity : ComponentActivity() {
             AppBlockerTheme {
                 BlockOverlayScreen(
                     state = state,
+                    onSkipBreath = viewModel::onSkipBreath,
                     onLegitimate = viewModel::onLegitimate,
                     onBreakingPlan = viewModel::onBreakingPlan,
                     onGoBack = viewModel::onGoBack,

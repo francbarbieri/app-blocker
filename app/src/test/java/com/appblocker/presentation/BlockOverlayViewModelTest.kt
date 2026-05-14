@@ -12,6 +12,7 @@ import com.appblocker.presentation.screen.BlockOverlayUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -54,28 +55,63 @@ class BlockOverlayViewModelTest {
     }
 
     @Test
-    fun `initial state is Confirmation with the supplied app name`() = runTest(dispatcher) {
+    fun `initial state is BreathingPause with 5 seconds remaining`() = runTest(dispatcher) {
         val (vm, _) = viewModel()
-        val state = vm.state.value
-        assertEquals(BlockOverlayUiState.Confirmation(appName), state)
+        assertEquals(BlockOverlayUiState.BreathingPause(appName, 5), vm.state.value)
     }
 
     @Test
-    fun `onBreakingPlan transitions to Motivational with the loaded message`() = runTest(dispatcher) {
-        val (vm, _) = viewModel(
-            message = MotivationalMessage(id = 1, appPackageName = packageName, message = "Keep going", createdAt = 0L)
-        )
-        vm.onBreakingPlan()
-        advanceUntilIdle()
-        assertEquals(
-            BlockOverlayUiState.Motivational(appName, "Keep going"),
-            vm.state.value
-        )
+    fun `countdown decrements secondsRemaining each second`() = runTest(dispatcher) {
+        val (vm, _) = viewModel()
+        advanceTimeBy(1_000)
+        assertEquals(BlockOverlayUiState.BreathingPause(appName, 4), vm.state.value)
+        advanceTimeBy(1_000)
+        assertEquals(BlockOverlayUiState.BreathingPause(appName, 3), vm.state.value)
+        advanceTimeBy(2_000)
+        assertEquals(BlockOverlayUiState.BreathingPause(appName, 1), vm.state.value)
     }
+
+    @Test
+    fun `countdown reaching zero transitions to Confirmation`() = runTest(dispatcher) {
+        val (vm, _) = viewModel()
+        advanceTimeBy(5_000)
+        assertEquals(BlockOverlayUiState.Confirmation(appName), vm.state.value)
+    }
+
+    @Test
+    fun `onSkipBreath transitions immediately to Confirmation and stops the countdown`() =
+        runTest(dispatcher) {
+            val (vm, _) = viewModel()
+            vm.onSkipBreath()
+            assertEquals(BlockOverlayUiState.Confirmation(appName), vm.state.value)
+            advanceTimeBy(10_000)
+            assertEquals(BlockOverlayUiState.Confirmation(appName), vm.state.value)
+        }
+
+    @Test
+    fun `onBreakingPlan after skip transitions to Motivational with the loaded message`() =
+        runTest(dispatcher) {
+            val (vm, _) = viewModel(
+                message = MotivationalMessage(
+                    id = 1,
+                    appPackageName = packageName,
+                    message = "Keep going",
+                    createdAt = 0L
+                )
+            )
+            vm.onSkipBreath()
+            vm.onBreakingPlan()
+            advanceUntilIdle()
+            assertEquals(
+                BlockOverlayUiState.Motivational(appName, "Keep going"),
+                vm.state.value
+            )
+        }
 
     @Test
     fun `onBreakingPlan with no message uses the fallback string`() = runTest(dispatcher) {
         val (vm, _) = viewModel(message = null)
+        vm.onSkipBreath()
         vm.onBreakingPlan()
         advanceUntilIdle()
         val state = vm.state.value as BlockOverlayUiState.Motivational
@@ -85,6 +121,7 @@ class BlockOverlayViewModelTest {
     @Test
     fun `onLegitimate records LEGITIMATE and emits GrantGraceAndClose`() = runTest(dispatcher) {
         val (vm, usageRepo) = viewModel()
+        vm.onSkipBreath()
         vm.events.test {
             vm.onLegitimate()
             advanceUntilIdle()
@@ -99,6 +136,7 @@ class BlockOverlayViewModelTest {
     @Test
     fun `onGoBack from Motivational records BACKED_OFF and emits GoHome`() = runTest(dispatcher) {
         val (vm, usageRepo) = viewModel()
+        vm.onSkipBreath()
         vm.onBreakingPlan()
         advanceUntilIdle()
         vm.events.test {
@@ -112,23 +150,26 @@ class BlockOverlayViewModelTest {
     }
 
     @Test
-    fun `onProceed from Motivational records BROKE_PLAN_PROCEEDED and emits GrantGraceAndClose`() = runTest(dispatcher) {
-        val (vm, usageRepo) = viewModel()
-        vm.onBreakingPlan()
-        advanceUntilIdle()
-        vm.events.test {
-            vm.onProceed()
+    fun `onProceed from Motivational records BROKE_PLAN_PROCEEDED and emits GrantGraceAndClose`() =
+        runTest(dispatcher) {
+            val (vm, usageRepo) = viewModel()
+            vm.onSkipBreath()
+            vm.onBreakingPlan()
             advanceUntilIdle()
-            assertEquals(BlockOverlayEvent.GrantGraceAndClose, awaitItem())
-            cancelAndIgnoreRemainingEvents()
+            vm.events.test {
+                vm.onProceed()
+                advanceUntilIdle()
+                assertEquals(BlockOverlayEvent.GrantGraceAndClose, awaitItem())
+                cancelAndIgnoreRemainingEvents()
+            }
+            assertEquals(1, usageRepo.recordedEvents.size)
+            assertEquals(UnblockOutcome.BROKE_PLAN_PROCEEDED, usageRepo.recordedEvents[0].outcome)
         }
-        assertEquals(1, usageRepo.recordedEvents.size)
-        assertEquals(UnblockOutcome.BROKE_PLAN_PROCEEDED, usageRepo.recordedEvents[0].outcome)
-    }
 
     @Test
     fun `onBackPressedFromMotivational returns state to Confirmation`() = runTest(dispatcher) {
         val (vm, usageRepo) = viewModel()
+        vm.onSkipBreath()
         vm.onBreakingPlan()
         advanceUntilIdle()
         assertTrue(vm.state.value is BlockOverlayUiState.Motivational)
@@ -136,6 +177,9 @@ class BlockOverlayViewModelTest {
         vm.onBackPressedFromMotivational()
 
         assertEquals(BlockOverlayUiState.Confirmation(appName), vm.state.value)
-        assertTrue("No event should be recorded on back-to-confirmation", usageRepo.recordedEvents.isEmpty())
+        assertTrue(
+            "No event should be recorded on back-to-confirmation",
+            usageRepo.recordedEvents.isEmpty()
+        )
     }
 }

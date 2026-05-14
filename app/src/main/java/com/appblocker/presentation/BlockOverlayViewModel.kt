@@ -8,7 +8,9 @@ import com.appblocker.domain.usecase.GetMotivationalMessageUseCase
 import com.appblocker.domain.usecase.RecordUsageUseCase
 import com.appblocker.presentation.screen.BlockOverlayEvent
 import com.appblocker.presentation.screen.BlockOverlayUiState
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,11 +24,37 @@ class BlockOverlayViewModel(
     private val getMotivationalMessage: GetMotivationalMessageUseCase
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow<BlockOverlayUiState>(BlockOverlayUiState.Confirmation(appName))
+    private val _state = MutableStateFlow<BlockOverlayUiState>(
+        BlockOverlayUiState.BreathingPause(appName, BREATH_SECONDS)
+    )
     val state: StateFlow<BlockOverlayUiState> = _state.asStateFlow()
 
     private val _events = Channel<BlockOverlayEvent>(Channel.BUFFERED)
     val events = _events.receiveAsFlow()
+
+    private var countdownJob: Job? = null
+
+    init {
+        countdownJob = viewModelScope.launch {
+            while (true) {
+                delay(1000)
+                val current = _state.value as? BlockOverlayUiState.BreathingPause ?: return@launch
+                val next = current.secondsRemaining - 1
+                if (next <= 0) {
+                    _state.value = BlockOverlayUiState.Confirmation(appName)
+                    return@launch
+                }
+                _state.value = current.copy(secondsRemaining = next)
+            }
+        }
+    }
+
+    fun onSkipBreath() {
+        countdownJob?.cancel()
+        if (_state.value is BlockOverlayUiState.BreathingPause) {
+            _state.value = BlockOverlayUiState.Confirmation(appName)
+        }
+    }
 
     fun onBreakingPlan() {
         viewModelScope.launch {
@@ -79,6 +107,7 @@ class BlockOverlayViewModel(
 
     companion object {
         const val FALLBACK_MESSAGE = "You've got this! Stay focused."
+        const val BREATH_SECONDS = 5
         private const val TAG = "BlockOverlayViewModel"
     }
 
