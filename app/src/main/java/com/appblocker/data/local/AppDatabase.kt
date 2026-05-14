@@ -13,6 +13,7 @@ import com.appblocker.data.local.dao.UnblockEventDao
 import com.appblocker.data.local.dao.UsageSessionDao
 import com.appblocker.data.local.entity.BlockedAppEntity
 import com.appblocker.data.local.entity.MotivationalMessageEntity
+import com.appblocker.data.local.entity.ScheduleAppEntity
 import com.appblocker.data.local.entity.ScheduleDayEntity
 import com.appblocker.data.local.entity.ScheduleEntity
 import com.appblocker.data.local.entity.UnblockEventEntity
@@ -23,11 +24,12 @@ import com.appblocker.data.local.entity.UsageSessionEntity
         BlockedAppEntity::class,
         ScheduleEntity::class,
         ScheduleDayEntity::class,
+        ScheduleAppEntity::class,
         UsageSessionEntity::class,
         UnblockEventEntity::class,
         MotivationalMessageEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -60,6 +62,49 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS schedule_apps (
+                        schedule_id INTEGER NOT NULL,
+                        app_package_name TEXT NOT NULL,
+                        PRIMARY KEY(schedule_id, app_package_name),
+                        FOREIGN KEY(schedule_id) REFERENCES schedules(id) ON UPDATE NO ACTION ON DELETE CASCADE,
+                        FOREIGN KEY(app_package_name) REFERENCES blocked_apps(package_name) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_schedule_apps_app_package_name ON schedule_apps(app_package_name)")
+
+                db.execSQL(
+                    "INSERT INTO schedule_apps (schedule_id, app_package_name) " +
+                        "SELECT id, app_package_name FROM schedules"
+                )
+
+                db.execSQL(
+                    """
+                    CREATE TABLE schedules_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        schedule_type TEXT NOT NULL,
+                        start_time TEXT,
+                        end_time TEXT,
+                        daily_limit_minutes INTEGER,
+                        is_active INTEGER NOT NULL DEFAULT 1
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO schedules_new (id, schedule_type, start_time, end_time, daily_limit_minutes, is_active)
+                    SELECT id, schedule_type, start_time, end_time, daily_limit_minutes, is_active FROM schedules
+                    """.trimIndent()
+                )
+                db.execSQL("DROP TABLE schedules")
+                db.execSQL("ALTER TABLE schedules_new RENAME TO schedules")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -67,7 +112,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "app_blocker.db"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { INSTANCE = it }
             }

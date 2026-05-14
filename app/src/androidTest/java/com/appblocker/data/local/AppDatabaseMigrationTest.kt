@@ -51,4 +51,64 @@ class AppDatabaseMigrationTest {
             )
         }
     }
+
+    @Test
+    fun migrate2To3_movesAppFkIntoScheduleAppsJunction() {
+        // Seed a v2 database: one blocked app + one schedule bound to it via the old FK
+        helper.createDatabase(testDbName, 2).use { db ->
+            db.execSQL(
+                "INSERT INTO blocked_apps (package_name, app_name, is_blocking_enabled, created_at) " +
+                "VALUES ('com.example.app', 'Example', 1, 0)"
+            )
+            db.execSQL(
+                "INSERT INTO schedules (id, app_package_name, schedule_type, start_time, end_time, is_active) " +
+                "VALUES (1, 'com.example.app', 'TIME_WINDOW', '09:00', '17:00', 1)"
+            )
+            db.execSQL("INSERT INTO schedule_days (schedule_id, day_of_week) VALUES (1, 1)")
+        }
+
+        helper.runMigrationsAndValidate(
+            testDbName,
+            3,
+            true,
+            AppDatabase.MIGRATION_2_3
+        ).use { db ->
+            // schedules row is preserved without the app_package_name column
+            db.query(
+                "SELECT id, schedule_type, start_time, end_time, daily_limit_minutes, is_active FROM schedules WHERE id = 1"
+            ).use { cursor ->
+                assert(cursor.moveToFirst()) { "Schedule row should still exist after migration" }
+                assert(cursor.getString(1) == "TIME_WINDOW")
+                assert(cursor.getString(2) == "09:00")
+                assert(cursor.getString(3) == "17:00")
+                assert(cursor.getInt(5) == 1)
+            }
+
+            // The old app FK is now a row in schedule_apps
+            db.query(
+                "SELECT schedule_id, app_package_name FROM schedule_apps WHERE schedule_id = 1"
+            ).use { cursor ->
+                assert(cursor.moveToFirst()) { "schedule_apps should have a row for the migrated schedule" }
+                assert(cursor.getLong(0) == 1L)
+                assert(cursor.getString(1) == "com.example.app")
+            }
+
+            // schedule_days references still resolve to the recreated schedules table
+            db.query("SELECT COUNT(*) FROM schedule_days WHERE schedule_id = 1").use { cursor ->
+                cursor.moveToFirst()
+                assert(cursor.getInt(0) == 1) { "Expected the schedule_days row to survive migration" }
+            }
+
+            // Multi-app insert works on the new schema
+            db.execSQL(
+                "INSERT INTO blocked_apps (package_name, app_name, is_blocking_enabled, created_at) " +
+                "VALUES ('com.example.other', 'Other', 1, 0)"
+            )
+            db.execSQL("INSERT INTO schedule_apps (schedule_id, app_package_name) VALUES (1, 'com.example.other')")
+            db.query("SELECT COUNT(*) FROM schedule_apps WHERE schedule_id = 1").use { cursor ->
+                cursor.moveToFirst()
+                assert(cursor.getInt(0) == 2) { "Schedule should now apply to two apps" }
+            }
+        }
+    }
 }

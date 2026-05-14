@@ -43,43 +43,46 @@ class BlockedAppRepositoryImpl(
     }
 
     override suspend fun addSchedule(schedule: Schedule): Long {
-        return scheduleDao.insertScheduleWithDays(schedule.toEntity(), schedule.days)
+        return scheduleDao.insertScheduleWithDaysAndApps(
+            schedule.toEntity(),
+            schedule.days,
+            schedule.appPackageNames
+        )
     }
 
     override suspend fun updateSchedule(schedule: Schedule) {
-        scheduleDao.updateScheduleWithDays(schedule.toEntity(), schedule.days)
+        scheduleDao.updateScheduleWithDaysAndApps(
+            schedule.toEntity(),
+            schedule.days,
+            schedule.appPackageNames
+        )
     }
 
     override suspend fun deleteSchedule(schedule: Schedule) {
         scheduleDao.deleteSchedule(schedule.toEntity())
     }
 
+    override fun getAllSchedules(): Flow<List<Schedule>> {
+        return scheduleDao.getAllSchedules().map { entities -> entities.hydrate() }
+    }
+
     override fun getSchedulesForApp(packageName: String): Flow<List<Schedule>> {
-        return scheduleDao.getSchedulesForApp(packageName).map { entities ->
-            val ids = entities.map { it.id }
-            val allDays = if (ids.isNotEmpty()) {
-                scheduleDao.getDaysForSchedules(ids).groupBy { it.scheduleId }
-            } else {
-                emptyMap()
-            }
-            entities.map { entity ->
-                val days = allDays[entity.id]?.map { it.dayOfWeek } ?: emptyList()
-                entity.toDomain(days)
-            }
-        }
+        return scheduleDao.getSchedulesForApp(packageName).map { entities -> entities.hydrate() }
     }
 
     override suspend fun getActiveSchedulesForApp(packageName: String): List<Schedule> {
-        val entities = scheduleDao.getActiveSchedulesForApp(packageName)
-        val ids = entities.map { it.id }
-        val allDays = if (ids.isNotEmpty()) {
-            scheduleDao.getDaysForSchedules(ids).groupBy { it.scheduleId }
-        } else {
-            emptyMap()
-        }
-        return entities.map { entity ->
-            val days = allDays[entity.id]?.map { it.dayOfWeek } ?: emptyList()
-            entity.toDomain(days)
+        return scheduleDao.getActiveSchedulesForApp(packageName).hydrate()
+    }
+
+    private suspend fun List<ScheduleEntity>.hydrate(): List<Schedule> {
+        if (isEmpty()) return emptyList()
+        val ids = map { it.id }
+        val daysByScheduleId = scheduleDao.getDaysForSchedules(ids).groupBy { it.scheduleId }
+        val appsByScheduleId = scheduleDao.getAppsForSchedules(ids).groupBy { it.scheduleId }
+        return map { entity ->
+            val days = daysByScheduleId[entity.id]?.map { it.dayOfWeek } ?: emptyList()
+            val apps = appsByScheduleId[entity.id]?.map { it.appPackageName } ?: emptyList()
+            entity.toDomain(apps, days)
         }
     }
 
@@ -99,7 +102,6 @@ class BlockedAppRepositoryImpl(
 
     private fun Schedule.toEntity() = ScheduleEntity(
         id = id,
-        appPackageName = appPackageName,
         scheduleType = scheduleType.name,
         startTime = startTime,
         endTime = endTime,
@@ -107,9 +109,9 @@ class BlockedAppRepositoryImpl(
         isActive = isActive
     )
 
-    private fun ScheduleEntity.toDomain(days: List<Int>) = Schedule(
+    private fun ScheduleEntity.toDomain(apps: List<String>, days: List<Int>) = Schedule(
         id = id,
-        appPackageName = appPackageName,
+        appPackageNames = apps,
         scheduleType = ScheduleType.valueOf(scheduleType),
         startTime = startTime,
         endTime = endTime,

@@ -6,6 +6,7 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import com.appblocker.data.local.entity.ScheduleAppEntity
 import com.appblocker.data.local.entity.ScheduleDayEntity
 import com.appblocker.data.local.entity.ScheduleEntity
 import kotlinx.coroutines.flow.Flow
@@ -28,10 +29,27 @@ interface ScheduleDao {
     @Query("DELETE FROM schedule_days WHERE schedule_id = :scheduleId")
     suspend fun deleteDaysForSchedule(scheduleId: Long)
 
-    @Query("SELECT * FROM schedules WHERE app_package_name = :packageName")
+    @Insert
+    suspend fun insertApps(apps: List<ScheduleAppEntity>)
+
+    @Query("DELETE FROM schedule_apps WHERE schedule_id = :scheduleId")
+    suspend fun deleteAppsForSchedule(scheduleId: Long)
+
+    @Query("SELECT * FROM schedules ORDER BY id DESC")
+    fun getAllSchedules(): Flow<List<ScheduleEntity>>
+
+    @Query(
+        """SELECT s.* FROM schedules s
+        INNER JOIN schedule_apps sa ON sa.schedule_id = s.id
+        WHERE sa.app_package_name = :packageName"""
+    )
     fun getSchedulesForApp(packageName: String): Flow<List<ScheduleEntity>>
 
-    @Query("SELECT * FROM schedules WHERE app_package_name = :packageName AND is_active = 1")
+    @Query(
+        """SELECT s.* FROM schedules s
+        INNER JOIN schedule_apps sa ON sa.schedule_id = s.id
+        WHERE sa.app_package_name = :packageName AND s.is_active = 1"""
+    )
     suspend fun getActiveSchedulesForApp(packageName: String): List<ScheduleEntity>
 
     @Query("SELECT * FROM schedule_days WHERE schedule_id = :scheduleId")
@@ -40,21 +58,39 @@ interface ScheduleDao {
     @Query("SELECT * FROM schedule_days WHERE schedule_id IN (:scheduleIds)")
     suspend fun getDaysForSchedules(scheduleIds: List<Long>): List<ScheduleDayEntity>
 
+    @Query("SELECT * FROM schedule_apps WHERE schedule_id IN (:scheduleIds)")
+    suspend fun getAppsForSchedules(scheduleIds: List<Long>): List<ScheduleAppEntity>
+
     @Transaction
-    suspend fun insertScheduleWithDays(schedule: ScheduleEntity, days: List<Int>): Long {
+    suspend fun insertScheduleWithDaysAndApps(
+        schedule: ScheduleEntity,
+        days: List<Int>,
+        appPackageNames: List<String>
+    ): Long {
         val scheduleId = insertSchedule(schedule)
         if (days.isNotEmpty()) {
             insertDays(days.map { ScheduleDayEntity(scheduleId, it) })
+        }
+        if (appPackageNames.isNotEmpty()) {
+            insertApps(appPackageNames.map { ScheduleAppEntity(scheduleId, it) })
         }
         return scheduleId
     }
 
     @Transaction
-    suspend fun updateScheduleWithDays(schedule: ScheduleEntity, days: List<Int>) {
+    suspend fun updateScheduleWithDaysAndApps(
+        schedule: ScheduleEntity,
+        days: List<Int>,
+        appPackageNames: List<String>
+    ) {
         updateSchedule(schedule)
         deleteDaysForSchedule(schedule.id)
+        deleteAppsForSchedule(schedule.id)
         if (days.isNotEmpty()) {
             insertDays(days.map { ScheduleDayEntity(schedule.id, it) })
+        }
+        if (appPackageNames.isNotEmpty()) {
+            insertApps(appPackageNames.map { ScheduleAppEntity(schedule.id, it) })
         }
     }
 }

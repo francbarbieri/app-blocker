@@ -15,6 +15,7 @@ interface BlockedAppRepository {
     suspend fun addSchedule(schedule: Schedule): Long
     suspend fun updateSchedule(schedule: Schedule)
     suspend fun deleteSchedule(schedule: Schedule)
+    fun getAllSchedules(): Flow<List<Schedule>>
     fun getSchedulesForApp(packageName: String): Flow<List<Schedule>>
     suspend fun getActiveSchedulesForApp(packageName: String): List<Schedule>
 }

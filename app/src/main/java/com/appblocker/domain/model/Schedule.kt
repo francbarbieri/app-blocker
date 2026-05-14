@@ -2,7 +2,7 @@ package com.appblocker.domain.model
 
 data class Schedule(
     val id: Long = 0,
-    val appPackageName: String,
+    val appPackageNames: List<String> = emptyList(),
     val scheduleType: ScheduleType,
     val startTime: String? = null,
     val endTime: String? = null,
