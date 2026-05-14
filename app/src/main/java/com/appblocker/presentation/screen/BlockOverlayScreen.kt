@@ -70,7 +70,8 @@ fun BlockOverlayScreen(
                 AnimatedContent(
                     targetState = state,
                     transitionSpec = {
-                        fadeIn(animationSpec = tween(250)) togetherWith fadeOut(animationSpec = tween(250))
+                        fadeIn(animationSpec = tween(durationMillis = 500, delayMillis = 200)) togetherWith
+                            fadeOut(animationSpec = tween(durationMillis = 400))
                     },
                     contentKey = { it::class },
                     label = "blockOverlayState",
@@ -153,7 +154,7 @@ private fun BreathingPauseContent(
                 strokeWidth = 6.dp,
             )
             Text(
-                text = "${secondsRemaining.coerceAtLeast(1)}",
+                text = "$secondsRemaining",
                 style = MaterialTheme.typography.displayLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.semantics {

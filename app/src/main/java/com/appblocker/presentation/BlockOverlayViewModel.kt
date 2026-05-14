@@ -40,11 +40,14 @@ class BlockOverlayViewModel(
                 delay(1000)
                 val current = _state.value as? BlockOverlayUiState.BreathingPause ?: return@launch
                 val next = current.secondsRemaining - 1
+                _state.value = current.copy(secondsRemaining = next)
                 if (next <= 0) {
-                    _state.value = BlockOverlayUiState.Confirmation(appName)
+                    delay(ZERO_HOLD_MS)
+                    if (_state.value is BlockOverlayUiState.BreathingPause) {
+                        _state.value = BlockOverlayUiState.Confirmation(appName)
+                    }
                     return@launch
                 }
-                _state.value = current.copy(secondsRemaining = next)
             }
         }
     }
@@ -108,6 +111,7 @@ class BlockOverlayViewModel(
     companion object {
         const val FALLBACK_MESSAGE = "You've got this! Stay focused."
         const val BREATH_SECONDS = 5
+        const val ZERO_HOLD_MS = 800L
         private const val TAG = "BlockOverlayViewModel"
     }
 

@@ -73,9 +73,16 @@ class BlockOverlayViewModelTest {
     }
 
     @Test
-    fun `countdown reaching zero transitions to Confirmation`() = runTest(dispatcher) {
+    fun `countdown lands on secondsRemaining=0 at five seconds`() = runTest(dispatcher) {
         val (vm, _) = viewModel()
         advanceTimeBy(5_000); runCurrent()
+        assertEquals(BlockOverlayUiState.BreathingPause(appName, 0), vm.state.value)
+    }
+
+    @Test
+    fun `countdown transitions to Confirmation after the zero-hold`() = runTest(dispatcher) {
+        val (vm, _) = viewModel()
+        advanceUntilIdle()
         assertEquals(BlockOverlayUiState.Confirmation(appName), vm.state.value)
     }
 
