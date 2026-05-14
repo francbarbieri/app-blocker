@@ -1,6 +1,7 @@
 package com.appblocker.presentation.screen
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -70,8 +71,9 @@ fun BlockOverlayScreen(
                 AnimatedContent(
                     targetState = state,
                     transitionSpec = {
-                        fadeIn(animationSpec = tween(durationMillis = 500, delayMillis = 200)) togetherWith
-                            fadeOut(animationSpec = tween(durationMillis = 400))
+                        (fadeIn(animationSpec = tween(durationMillis = 500, delayMillis = 300)) togetherWith
+                            fadeOut(animationSpec = tween(durationMillis = 300)))
+                            .using(SizeTransform(clip = false) { _, _ -> tween(0) })
                     },
                     contentKey = { it::class },
                     label = "blockOverlayState",
