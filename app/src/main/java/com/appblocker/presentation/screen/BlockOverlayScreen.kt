@@ -122,62 +122,64 @@ private fun BreathingPauseContent(
         label = "countdownProgress",
     )
 
-    Text(
-        text = "Take a deep breath.",
-        style = MaterialTheme.typography.headlineMedium,
-        color = MaterialTheme.colorScheme.onSurface,
-        textAlign = TextAlign.Center,
-    )
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    Text(
-        text = "$appName will still be there in a moment.",
-        style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = TextAlign.Center,
-    )
-
-    Spacer(modifier = Modifier.height(40.dp))
-
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier.size(140.dp),
-    ) {
-        CircularProgressIndicator(
-            progress = { animatedProgress },
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-            trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-            strokeWidth = 6.dp,
-        )
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            text = "${secondsRemaining.coerceAtLeast(1)}",
-            style = MaterialTheme.typography.displayLarge,
+            text = "Take a deep breath.",
+            style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.semantics {
-                liveRegion = LiveRegionMode.Polite
-                contentDescription = "$secondsRemaining seconds remaining"
-            },
+            textAlign = TextAlign.Center,
         )
-    }
 
-    Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-    Text(
-        text = "Breathe in… and out.",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.alpha(breathingAlpha),
-    )
-
-    Spacer(modifier = Modifier.height(48.dp))
-
-    TextButton(onClick = onSkip) {
         Text(
-            text = "Skip",
+            text = "$appName will still be there in a moment.",
+            style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
         )
+
+        Spacer(modifier = Modifier.height(40.dp))
+
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(140.dp),
+        ) {
+            CircularProgressIndicator(
+                progress = { animatedProgress },
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                strokeWidth = 6.dp,
+            )
+            Text(
+                text = "${secondsRemaining.coerceAtLeast(1)}",
+                style = MaterialTheme.typography.displayLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.semantics {
+                    liveRegion = LiveRegionMode.Polite
+                    contentDescription = "$secondsRemaining seconds remaining"
+                },
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = "Breathe in… and out.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.alpha(breathingAlpha),
+        )
+
+        Spacer(modifier = Modifier.height(48.dp))
+
+        TextButton(onClick = onSkip) {
+            Text(
+                text = "Skip",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -187,31 +189,33 @@ private fun ConfirmationContent(
     onLegitimate: () -> Unit,
     onBreakingPlan: () -> Unit,
 ) {
-    Text(
-        text = "Opening before your planned time?",
-        style = MaterialTheme.typography.headlineMedium,
-        color = MaterialTheme.colorScheme.onSurface,
-        textAlign = TextAlign.Center,
-    )
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = "Opening before your planned time?",
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
+        )
 
-    Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-    Text(
-        text = appName,
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+        Text(
+            text = appName,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
-    Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(48.dp))
 
-    Button(onClick = onLegitimate) {
-        Text(text = "No, this is planned")
-    }
+        Button(onClick = onLegitimate) {
+            Text(text = "No, this is planned")
+        }
 
-    Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-    OutlinedButton(onClick = onBreakingPlan) {
-        Text(text = "Yes, I'm breaking my plan")
+        OutlinedButton(onClick = onBreakingPlan) {
+            Text(text = "Yes, I'm breaking my plan")
+        }
     }
 }
 
@@ -222,42 +226,44 @@ private fun MotivationalContent(
     onGoBack: () -> Unit,
     onProceed: () -> Unit,
 ) {
-    Text(
-        text = "This app is blocked",
-        style = MaterialTheme.typography.headlineMedium,
-        color = MaterialTheme.colorScheme.onSurface,
-    )
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    Text(
-        text = appName,
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-
-    Spacer(modifier = Modifier.height(32.dp))
-
-    Text(
-        text = message,
-        style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurface,
-        textAlign = TextAlign.Center,
-    )
-
-    Spacer(modifier = Modifier.height(48.dp))
-
-    Button(onClick = onGoBack) {
-        Text(text = "Go Back")
-    }
-
-    Spacer(modifier = Modifier.height(16.dp))
-
-    TextButton(onClick = onProceed) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            text = "Proceed Anyway",
+            text = "This app is blocked",
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = appName,
+            style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
+        )
+
+        Spacer(modifier = Modifier.height(48.dp))
+
+        Button(onClick = onGoBack) {
+            Text(text = "Go Back")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        TextButton(onClick = onProceed) {
+            Text(
+                text = "Proceed Anyway",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
