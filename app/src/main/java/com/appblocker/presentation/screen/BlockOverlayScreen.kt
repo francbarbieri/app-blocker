@@ -30,18 +30,28 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.appblocker.presentation.theme.AppBlockerTheme
+import kotlinx.coroutines.delay
 
 @Composable
 fun BlockOverlayScreen(
@@ -192,34 +202,91 @@ private fun ConfirmationContent(
     onLegitimate: () -> Unit,
     onBreakingPlan: () -> Unit,
 ) {
+    var titleDone by remember { mutableStateOf(false) }
+    var subtitleDone by remember { mutableStateOf(false) }
+    val buttonsAlpha by animateFloatAsState(
+        targetValue = if (subtitleDone) 1f else 0f,
+        animationSpec = tween(durationMillis = 500, delayMillis = 200),
+        label = "confirmButtonsAlpha",
+    )
+
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
+        TypewriterText(
             text = "Opening before your planned time?",
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
+            onComplete = { titleDone = true },
         )
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        Text(
+        TypewriterText(
             text = appName,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            start = titleDone,
+            onComplete = { subtitleDone = true },
         )
 
         Spacer(modifier = Modifier.height(48.dp))
 
-        Button(onClick = onLegitimate) {
+        Button(
+            onClick = onLegitimate,
+            enabled = subtitleDone,
+            modifier = Modifier.alpha(buttonsAlpha),
+        ) {
             Text(text = "No, this is planned")
         }
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        OutlinedButton(onClick = onBreakingPlan) {
+        OutlinedButton(
+            onClick = onBreakingPlan,
+            enabled = subtitleDone,
+            modifier = Modifier.alpha(buttonsAlpha),
+        ) {
             Text(text = "Yes, I'm breaking my plan")
         }
     }
+}
+
+@Composable
+private fun TypewriterText(
+    text: String,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier,
+    textAlign: TextAlign? = null,
+    delayPerCharMs: Long = 35L,
+    start: Boolean = true,
+    onComplete: () -> Unit = {},
+) {
+    var visibleChars by remember(text) { mutableStateOf(0) }
+    LaunchedEffect(text, start) {
+        if (!start) return@LaunchedEffect
+        for (i in 1..text.length) {
+            visibleChars = i
+            delay(delayPerCharMs)
+        }
+        onComplete()
+    }
+    val annotated = buildAnnotatedString {
+        withStyle(SpanStyle(color = color)) {
+            append(text.take(visibleChars))
+        }
+        if (visibleChars < text.length) {
+            withStyle(SpanStyle(color = Color.Transparent)) {
+                append(text.substring(visibleChars))
+            }
+        }
+    }
+    Text(
+        text = annotated,
+        style = style,
+        textAlign = textAlign,
+        modifier = modifier,
+    )
 }
 
 @Composable
