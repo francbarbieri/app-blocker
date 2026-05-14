@@ -296,39 +296,61 @@ private fun MotivationalContent(
     onGoBack: () -> Unit,
     onProceed: () -> Unit,
 ) {
+    var titleDone by remember { mutableStateOf(false) }
+    var subtitleDone by remember { mutableStateOf(false) }
+    var messageDone by remember { mutableStateOf(false) }
+    val buttonsAlpha by animateFloatAsState(
+        targetValue = if (messageDone) 1f else 0f,
+        animationSpec = tween(durationMillis = 500, delayMillis = 200),
+        label = "motivationalButtonsAlpha",
+    )
+
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
+        TypewriterText(
             text = "This app is blocked",
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onSurface,
+            onComplete = { titleDone = true },
         )
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        Text(
+        TypewriterText(
             text = appName,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            start = titleDone,
+            onComplete = { subtitleDone = true },
         )
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        Text(
+        TypewriterText(
             text = message,
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
+            start = subtitleDone,
+            onComplete = { messageDone = true },
         )
 
         Spacer(modifier = Modifier.height(48.dp))
 
-        Button(onClick = onGoBack) {
+        Button(
+            onClick = onGoBack,
+            enabled = messageDone,
+            modifier = Modifier.alpha(buttonsAlpha),
+        ) {
             Text(text = "Go Back")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        TextButton(onClick = onProceed) {
+        TextButton(
+            onClick = onProceed,
+            enabled = messageDone,
+            modifier = Modifier.alpha(buttonsAlpha),
+        ) {
             Text(
                 text = "Proceed Anyway",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
