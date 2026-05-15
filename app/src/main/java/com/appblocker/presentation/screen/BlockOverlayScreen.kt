@@ -85,6 +85,7 @@ fun BlockOverlayScreen(
                             fadeOut(animationSpec = tween(durationMillis = 300)))
                             .using(SizeTransform(clip = false) { _, _ -> tween(0) })
                     },
+                    contentAlignment = Alignment.Center,
                     contentKey = { it::class },
                     label = "blockOverlayState",
                 ) { current ->
