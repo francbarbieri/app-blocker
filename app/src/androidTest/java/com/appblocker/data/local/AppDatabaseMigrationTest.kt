@@ -111,4 +111,36 @@ class AppDatabaseMigrationTest {
             }
         }
     }
+
+    @Test
+    fun migrate3To4_createsFocusSessionsTable() {
+        helper.createDatabase(testDbName, 3).use {
+            // No v3 data needed; the new table is independent.
+        }
+
+        helper.runMigrationsAndValidate(
+            testDbName,
+            4,
+            true,
+            AppDatabase.MIGRATION_3_4
+        ).use { db ->
+            // The new table accepts a row using the production column shape.
+            db.execSQL(
+                "INSERT INTO focus_sessions (started_at, expires_at, ended_at) " +
+                "VALUES (100, 200, NULL)"
+            )
+            db.query("SELECT id, started_at, expires_at, ended_at FROM focus_sessions").use { cursor ->
+                assert(cursor.moveToFirst())
+                assert(cursor.getLong(1) == 100L)
+                assert(cursor.getLong(2) == 200L)
+                assert(cursor.isNull(3))
+            }
+            // Indefinite session: expires_at NULL is supported.
+            db.execSQL("INSERT INTO focus_sessions (started_at, expires_at) VALUES (300, NULL)")
+            db.query("SELECT COUNT(*) FROM focus_sessions").use { cursor ->
+                cursor.moveToFirst()
+                assert(cursor.getInt(0) == 2)
+            }
+        }
+    }
 }

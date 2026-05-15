@@ -5,6 +5,7 @@ import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
 import com.appblocker.data.local.AppDatabase
 import com.appblocker.data.repository.BlockedAppRepositoryImpl
+import com.appblocker.data.repository.FocusSessionRepositoryImpl
 import com.appblocker.data.repository.UsageRepositoryImpl
 import com.appblocker.domain.usecase.IsAppBlockedUseCase
 import com.appblocker.domain.usecase.RecordUsageUseCase
@@ -44,7 +45,8 @@ class AppBlockerAccessibilityService : AccessibilityService() {
             database.usageSessionDao(),
             database.unblockEventDao()
         )
-        isAppBlocked = IsAppBlockedUseCase(blockedAppRepo, usageRepo)
+        val focusSessionRepo = FocusSessionRepositoryImpl(database.focusSessionDao())
+        isAppBlocked = IsAppBlockedUseCase(blockedAppRepo, usageRepo, focusSessionRepo)
         recordUsage = RecordUsageUseCase(usageRepo)
     }
 

@@ -23,14 +23,22 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.SelfImprovement
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,12 +50,17 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.appblocker.domain.model.BlockedApp
+import com.appblocker.domain.model.FocusSession
 import com.appblocker.presentation.theme.AppBlockerTheme
 
 @Composable
 fun HomeScreen(
     blockedApps: List<BlockedApp>,
     isAccessibilityEnabled: Boolean,
+    focusSession: FocusSession?,
+    nowMs: Long,
+    onStartFocus: (Long?) -> Unit,
+    onEndFocus: () -> Unit,
     onNavigateToApps: () -> Unit,
     onNavigateToSchedules: () -> Unit,
     modifier: Modifier = Modifier,
@@ -67,6 +80,13 @@ fun HomeScreen(
             onClick = onNavigateToApps,
         )
 
+        FocusSessionCard(
+            session = focusSession?.takeIf { it.isActive(nowMs) },
+            nowMs = nowMs,
+            onStart = onStartFocus,
+            onEnd = onEndFocus,
+        )
+
         // Feature cards
         FeatureCard(
             icon = Icons.Outlined.Schedule,
@@ -81,6 +101,148 @@ fun HomeScreen(
             description = "Track your screen time and habits",
             onClick = { /* placeholder */ },
         )
+    }
+}
+
+@Composable
+private fun FocusSessionCard(
+    session: FocusSession?,
+    nowMs: Long,
+    onStart: (Long?) -> Unit,
+    onEnd: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedCard(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        ),
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.SelfImprovement,
+                    contentDescription = null,
+                    modifier = Modifier.size(28.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Focus session",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = if (session != null) {
+                            "Blocking every selected app right now"
+                        } else {
+                            "Block everything on demand"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (session == null) {
+                FocusInactiveBody(onStart = onStart)
+            } else {
+                FocusActiveBody(session = session, nowMs = nowMs, onEnd = onEnd)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FocusInactiveBody(onStart: (Long?) -> Unit) {
+    var selected by remember { mutableStateOf<DurationChoice>(DurationChoice.Minutes(30)) }
+
+    Column {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            DurationChoice.options.forEach { option ->
+                FilterChip(
+                    selected = option == selected,
+                    onClick = { selected = option },
+                    label = { Text(text = option.label) },
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Button(
+            onClick = { onStart(selected.durationMs) },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(text = "Start focus")
+        }
+    }
+}
+
+@Composable
+private fun FocusActiveBody(
+    session: FocusSession,
+    nowMs: Long,
+    onEnd: () -> Unit,
+) {
+    val remaining = session.remainingMs(nowMs)
+    Column {
+        AssistChip(
+            onClick = {},
+            label = {
+                Text(
+                    text = if (remaining != null) {
+                        "Time remaining  ${formatRemaining(remaining)}"
+                    } else {
+                        "Active indefinitely"
+                    },
+                )
+            },
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedButton(
+            onClick = onEnd,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(text = "End focus")
+        }
+    }
+}
+
+private sealed interface DurationChoice {
+    val label: String
+    val durationMs: Long?
+
+    data class Minutes(val n: Int) : DurationChoice {
+        override val label: String = if (n < 60) "$n min" else "${n / 60} hr"
+        override val durationMs: Long = n * 60_000L
+    }
+
+    data object Indefinite : DurationChoice {
+        override val label: String = "Until I stop"
+        override val durationMs: Long? = null
+    }
+
+    companion object {
+        val options: List<DurationChoice> = listOf(
+            Minutes(15),
+            Minutes(30),
+            Minutes(60),
+            Indefinite,
+        )
+    }
+}
+
+private fun formatRemaining(ms: Long): String {
+    val totalSeconds = (ms + 999) / 1000
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    return if (hours > 0) {
+        "%d:%02d:%02d".format(hours, minutes, seconds)
+    } else {
+        "%02d:%02d".format(minutes, seconds)
     }
 }
 
@@ -267,6 +429,10 @@ private fun HomeScreenPreview() {
         HomeScreen(
             blockedApps = sampleApps,
             isAccessibilityEnabled = true,
+            focusSession = null,
+            nowMs = 0L,
+            onStartFocus = {},
+            onEndFocus = {},
             onNavigateToApps = {},
             onNavigateToSchedules = {},
         )
@@ -280,6 +446,32 @@ private fun HomeScreenEmptyPreview() {
         HomeScreen(
             blockedApps = emptyList(),
             isAccessibilityEnabled = false,
+            focusSession = null,
+            nowMs = 0L,
+            onStartFocus = {},
+            onEndFocus = {},
+            onNavigateToApps = {},
+            onNavigateToSchedules = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun HomeScreenFocusActivePreview() {
+    AppBlockerTheme {
+        val now = 0L
+        HomeScreen(
+            blockedApps = sampleApps,
+            isAccessibilityEnabled = true,
+            focusSession = FocusSession(
+                id = 1,
+                startedAt = now - 60_000L,
+                expiresAt = now + (12 * 60_000L) + 34_000L,
+            ),
+            nowMs = now,
+            onStartFocus = {},
+            onEndFocus = {},
             onNavigateToApps = {},
             onNavigateToSchedules = {},
         )

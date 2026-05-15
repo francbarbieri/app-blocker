@@ -76,6 +76,8 @@ fun AppNavigation(
     val viewModel: MainViewModel = viewModel()
     val blockedApps by viewModel.blockedApps.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val focusSession by viewModel.focusSession.collectAsStateWithLifecycle()
+    val nowMs by viewModel.now.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -140,6 +142,10 @@ fun AppNavigation(
                 HomeScreen(
                     blockedApps = blockedApps,
                     isAccessibilityEnabled = isAccessibilityEnabled,
+                    focusSession = focusSession,
+                    nowMs = nowMs,
+                    onStartFocus = viewModel::startFocusSession,
+                    onEndFocus = viewModel::endFocusSession,
                     onNavigateToApps = { selectedTabIndex = 1 },
                     onNavigateToSchedules = { selectedTabIndex = 2 },
                     modifier = Modifier.padding(innerPadding),

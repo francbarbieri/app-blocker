@@ -5,11 +5,14 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.appblocker.data.local.AppDatabase
 import com.appblocker.data.repository.BlockedAppRepositoryImpl
+import com.appblocker.data.repository.FocusSessionRepositoryImpl
 import com.appblocker.domain.model.BlockedApp
+import com.appblocker.domain.model.FocusSession
 import com.appblocker.domain.usecase.AddBlockedAppUseCase
 import com.appblocker.domain.usecase.GetAllBlockedAppsUseCase
 import com.appblocker.domain.usecase.RemoveBlockedAppUseCase
 import com.appblocker.domain.usecase.ToggleBlockingUseCase
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
@@ -22,6 +25,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         database.blockedAppDao(),
         database.scheduleDao()
     )
+    private val focusSessionRepository = FocusSessionRepositoryImpl(database.focusSessionDao())
 
     private val getAllBlockedApps = GetAllBlockedAppsUseCase(repository)
     private val addBlockedApp = AddBlockedAppUseCase(repository)
@@ -34,8 +38,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading
 
+    private val _focusSession = MutableStateFlow<FocusSession?>(null)
+    val focusSession: StateFlow<FocusSession?> = _focusSession
+
+    private val _now = MutableStateFlow(System.currentTimeMillis())
+    val now: StateFlow<Long> = _now
+
     init {
         observeBlockedApps()
+        observeFocusSession()
+        startClockTick()
     }
 
     private fun observeBlockedApps() {
@@ -46,6 +58,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _blockedApps.value = apps
                     _isLoading.value = false
                 }
+        }
+    }
+
+    private fun observeFocusSession() {
+        viewModelScope.launch {
+            focusSessionRepository.observeLatestOpenSession().collect { session ->
+                _focusSession.value = session
+            }
+        }
+    }
+
+    private fun startClockTick() {
+        viewModelScope.launch {
+            while (true) {
+                _now.value = System.currentTimeMillis()
+                delay(1_000)
+            }
         }
     }
 
@@ -64,6 +93,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleAppBlocking(packageName: String, enabled: Boolean) {
         viewModelScope.launch {
             toggleBlocking(packageName, enabled)
+        }
+    }
+
+    fun startFocusSession(durationMs: Long?) {
+        viewModelScope.launch {
+            focusSessionRepository.startSession(durationMs)
+        }
+    }
+
+    fun endFocusSession() {
+        viewModelScope.launch {
+            focusSessionRepository.endActiveSession()
         }
     }
 }

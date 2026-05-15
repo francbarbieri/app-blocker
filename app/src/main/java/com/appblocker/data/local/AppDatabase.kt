@@ -7,11 +7,13 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.appblocker.data.local.dao.BlockedAppDao
+import com.appblocker.data.local.dao.FocusSessionDao
 import com.appblocker.data.local.dao.MotivationalMessageDao
 import com.appblocker.data.local.dao.ScheduleDao
 import com.appblocker.data.local.dao.UnblockEventDao
 import com.appblocker.data.local.dao.UsageSessionDao
 import com.appblocker.data.local.entity.BlockedAppEntity
+import com.appblocker.data.local.entity.FocusSessionEntity
 import com.appblocker.data.local.entity.MotivationalMessageEntity
 import com.appblocker.data.local.entity.ScheduleAppEntity
 import com.appblocker.data.local.entity.ScheduleDayEntity
@@ -27,9 +29,10 @@ import com.appblocker.data.local.entity.UsageSessionEntity
         ScheduleAppEntity::class,
         UsageSessionEntity::class,
         UnblockEventEntity::class,
-        MotivationalMessageEntity::class
+        MotivationalMessageEntity::class,
+        FocusSessionEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -39,6 +42,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun usageSessionDao(): UsageSessionDao
     abstract fun unblockEventDao(): UnblockEventDao
     abstract fun motivationalMessageDao(): MotivationalMessageDao
+    abstract fun focusSessionDao(): FocusSessionDao
 
     companion object {
         @Volatile
@@ -105,6 +109,21 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS focus_sessions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        started_at INTEGER NOT NULL,
+                        expires_at INTEGER,
+                        ended_at INTEGER
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -112,7 +131,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "app_blocker.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                     .also { INSTANCE = it }
             }
