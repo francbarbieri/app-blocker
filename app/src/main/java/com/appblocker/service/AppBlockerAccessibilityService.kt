@@ -3,28 +3,49 @@ package com.appblocker.service
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
-import com.appblocker.data.local.AppDatabase
-import com.appblocker.data.repository.BlockedAppRepositoryImpl
-import com.appblocker.data.repository.FocusSessionRepositoryImpl
-import com.appblocker.data.repository.UsageRepositoryImpl
+import com.appblocker.appContainer
 import com.appblocker.domain.usecase.IsAppBlockedUseCase
+import com.appblocker.domain.usecase.ObserveEnabledBlockedPackagesUseCase
 import com.appblocker.domain.usecase.RecordUsageUseCase
 import com.appblocker.presentation.BlockOverlayActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 
 class AppBlockerAccessibilityService : AccessibilityService() {
 
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // Single-thread confinement: every mutation of currentTrackedPackage /
+    // currentSessionId happens on this one IO thread. The event thread never
+    // touches those fields.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val serviceScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO.limitedParallelism(1)
+    )
+
     private lateinit var isAppBlocked: IsAppBlockedUseCase
     private lateinit var recordUsage: RecordUsageUseCase
+    private lateinit var observeEnabledBlockedPackages: ObserveEnabledBlockedPackagesUseCase
 
+    // Mutated only by the Flow collector below (on serviceScope's thread);
+    // read on the event thread. @Volatile gives the cross-thread visibility
+    // guarantee — Set replacement is atomic, no torn writes.
+    @Volatile
+    private var blockedPackages: Set<String> = emptySet()
+    private var blockedPackagesJob: Job? = null
+
+    // Confined to serviceScope.
     private var currentTrackedPackage: String? = null
     private var currentSessionId: Long? = null
+
+    // Confined to the event thread.
+    private var lastOverlayPackage: String? = null
+    private var lastOverlayAtMs: Long = 0L
 
     private val ignoredPackages = setOf(
         "com.appblocker",
@@ -36,18 +57,16 @@ class AppBlockerAccessibilityService : AccessibilityService() {
 
     override fun onCreate() {
         super.onCreate()
-        val database = AppDatabase.getInstance(this)
-        val blockedAppRepo = BlockedAppRepositoryImpl(
-            database.blockedAppDao(),
-            database.scheduleDao()
-        )
-        val usageRepo = UsageRepositoryImpl(
-            database.usageSessionDao(),
-            database.unblockEventDao()
-        )
-        val focusSessionRepo = FocusSessionRepositoryImpl(database.focusSessionDao())
-        isAppBlocked = IsAppBlockedUseCase(blockedAppRepo, usageRepo, focusSessionRepo)
-        recordUsage = RecordUsageUseCase(usageRepo)
+        val container = applicationContext.appContainer
+        isAppBlocked = container.isAppBlockedUseCase
+        recordUsage = container.recordUsageUseCase
+        observeEnabledBlockedPackages = container.observeEnabledBlockedPackagesUseCase
+
+        blockedPackagesJob = serviceScope.launch {
+            observeEnabledBlockedPackages().collectLatest { snapshot ->
+                blockedPackages = snapshot
+            }
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -59,20 +78,45 @@ class AppBlockerAccessibilityService : AccessibilityService() {
 
         if (isInGrace(packageName)) return
 
-        if (packageName != currentTrackedPackage) {
-            endCurrentSession()
+        // Fast path: O(1) set lookup, no DB, no coroutine.
+        // The vast majority of window-state events involve apps the user has
+        // not chosen to block — those should cost nothing here.
+        if (packageName !in blockedPackages) {
+            if (packageName != currentTrackedPackage && currentTrackedPackage != null) {
+                serviceScope.launch { endCurrentSessionInternal() }
+            }
+            return
         }
 
-        serviceScope.launch {
-            val blocked = isAppBlocked(packageName)
-            if (blocked) {
-                if (currentTrackedPackage != packageName) {
-                    currentTrackedPackage = packageName
-                    currentSessionId = recordUsage.startSession(packageName)
-                }
-                launchBlockOverlay(packageName)
-            }
+        // Debounce repeated launches for the same blocked package: prevents
+        // the overlay from being recreated if the user dismisses it back to
+        // the blocked app and a fresh TYPE_WINDOW_STATE_CHANGED fires.
+        val now = System.currentTimeMillis()
+        if (packageName == lastOverlayPackage && now - lastOverlayAtMs < OVERLAY_DEBOUNCE_MS) {
+            return
         }
+        lastOverlayPackage = packageName
+        lastOverlayAtMs = now
+
+        serviceScope.launch {
+            // Slow path: schedule windows, daily-limit math, focus-session check.
+            // Reached only for packages already in the user's blocked set.
+            if (!isAppBlocked(packageName)) return@launch
+            if (currentTrackedPackage != packageName) {
+                endCurrentSessionInternal()
+                currentTrackedPackage = packageName
+                currentSessionId = recordUsage.startSession(packageName)
+            }
+            launchBlockOverlay(packageName)
+        }
+    }
+
+    /** Must run on serviceScope (single-threaded). */
+    private suspend fun endCurrentSessionInternal() {
+        val sessionId = currentSessionId ?: return
+        recordUsage.endSession(sessionId)
+        currentTrackedPackage = null
+        currentSessionId = null
     }
 
     private fun launchBlockOverlay(packageName: String) {
@@ -98,27 +142,19 @@ class AppBlockerAccessibilityService : AccessibilityService() {
         return false
     }
 
-    private fun endCurrentSession() {
-        val sessionId = currentSessionId ?: return
-        serviceScope.launch {
-            recordUsage.endSession(sessionId)
-        }
-        currentTrackedPackage = null
-        currentSessionId = null
-    }
-
     override fun onInterrupt() {
-        endCurrentSession()
+        serviceScope.launch { endCurrentSessionInternal() }
     }
 
     override fun onDestroy() {
-        endCurrentSession()
+        serviceScope.launch { endCurrentSessionInternal() }
         serviceScope.cancel()
         super.onDestroy()
     }
 
     companion object {
         const val GRACE_PERIOD_MS: Long = 5 * 60_000L
+        private const val OVERLAY_DEBOUNCE_MS: Long = 1_500L
 
         private val graceUntilMs = ConcurrentHashMap<String, Long>()
 

@@ -11,11 +11,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.Lifecycle
-import com.appblocker.data.local.AppDatabase
-import com.appblocker.data.repository.MotivationalMessageRepositoryImpl
-import com.appblocker.data.repository.UsageRepositoryImpl
-import com.appblocker.domain.usecase.GetMotivationalMessageUseCase
-import com.appblocker.domain.usecase.RecordUsageUseCase
+import com.appblocker.appContainer
 import com.appblocker.presentation.screen.BlockOverlayEvent
 import com.appblocker.presentation.screen.BlockOverlayScreen
 import com.appblocker.presentation.screen.BlockOverlayUiState
@@ -33,18 +29,12 @@ class BlockOverlayActivity : ComponentActivity() {
     private lateinit var blockedPackage: String
 
     private val viewModel: BlockOverlayViewModel by viewModels {
-        val database = AppDatabase.getInstance(this)
-        val recordUsage = RecordUsageUseCase(
-            UsageRepositoryImpl(database.usageSessionDao(), database.unblockEventDao())
-        )
-        val getMotivationalMessage = GetMotivationalMessageUseCase(
-            MotivationalMessageRepositoryImpl(database.motivationalMessageDao())
-        )
+        val container = appContainer
         BlockOverlayViewModel.Factory(
             packageName = blockedPackage,
             appName = intent.getStringExtra(EXTRA_APP_NAME) ?: blockedPackage,
-            recordUsage = recordUsage,
-            getMotivationalMessage = getMotivationalMessage
+            recordUsage = container.recordUsageUseCase,
+            getMotivationalMessage = container.getMotivationalMessageUseCase
         )
     }
 

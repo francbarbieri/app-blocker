@@ -49,6 +49,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.appblocker.domain.model.BlockedApp
+import com.appblocker.appContainer
 import com.appblocker.presentation.MainViewModel
 import com.appblocker.presentation.components.BlockedAppItem
 import com.appblocker.presentation.theme.AppBlockerTheme
@@ -67,7 +68,9 @@ import kotlinx.coroutines.withContext
 fun MainScreen(
     modifier: Modifier = Modifier,
 ) {
-    val viewModel: MainViewModel = viewModel()
+    val viewModel: MainViewModel = viewModel(
+        factory = MainViewModel.Factory(LocalContext.current.appContainer)
+    )
     val blockedApps by viewModel.blockedApps.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
 

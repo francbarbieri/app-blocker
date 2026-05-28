@@ -64,7 +64,7 @@ class BlockOverlayViewModel(
             val message = try {
                 getMotivationalMessage(packageName)?.message ?: FALLBACK_MESSAGE
             } catch (t: Throwable) {
-                android.util.Log.w(TAG, "Failed to load motivational message for $packageName", t)
+                android.util.Log.w(TAG, "Failed to load motivational message", t)
                 FALLBACK_MESSAGE
             }
             _state.value = BlockOverlayUiState.Motivational(appName, message)
@@ -76,7 +76,7 @@ class BlockOverlayViewModel(
             try {
                 recordUsage.recordUnblock(packageName, UnblockOutcome.LEGITIMATE)
             } catch (t: Throwable) {
-                android.util.Log.w(TAG, "Failed to record LEGITIMATE outcome for $packageName", t)
+                android.util.Log.w(TAG, "Failed to record unblock outcome", t)
             }
             _events.send(BlockOverlayEvent.GrantGraceAndClose)
         }
@@ -87,7 +87,7 @@ class BlockOverlayViewModel(
             try {
                 recordUsage.recordUnblock(packageName, UnblockOutcome.BACKED_OFF)
             } catch (t: Throwable) {
-                android.util.Log.w(TAG, "Failed to record BACKED_OFF outcome for $packageName", t)
+                android.util.Log.w(TAG, "Failed to record unblock outcome", t)
             }
             _events.send(BlockOverlayEvent.GoHome)
         }
@@ -98,7 +98,7 @@ class BlockOverlayViewModel(
             try {
                 recordUsage.recordUnblock(packageName, UnblockOutcome.BROKE_PLAN_PROCEEDED)
             } catch (t: Throwable) {
-                android.util.Log.w(TAG, "Failed to record BROKE_PLAN_PROCEEDED outcome for $packageName", t)
+                android.util.Log.w(TAG, "Failed to record unblock outcome", t)
             }
             _events.send(BlockOverlayEvent.GrantGraceAndClose)
         }

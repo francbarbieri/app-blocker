@@ -36,6 +36,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.appblocker.appContainer
 import com.appblocker.presentation.MainViewModel
 import com.appblocker.presentation.theme.AppBlockerTheme
 
@@ -73,7 +74,9 @@ enum class NavTab(
 fun AppNavigation(
     modifier: Modifier = Modifier,
 ) {
-    val viewModel: MainViewModel = viewModel()
+    val viewModel: MainViewModel = viewModel(
+        factory = MainViewModel.Factory(LocalContext.current.appContainer)
+    )
     val blockedApps by viewModel.blockedApps.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val focusSession by viewModel.focusSession.collectAsStateWithLifecycle()

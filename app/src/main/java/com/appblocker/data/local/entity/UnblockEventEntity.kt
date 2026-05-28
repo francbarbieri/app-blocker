@@ -16,7 +16,7 @@ import androidx.room.PrimaryKey
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("app_package_name")]
+    indices = [Index("app_package_name", "timestamp")]
 )
 data class UnblockEventEntity(
     @PrimaryKey(autoGenerate = true)

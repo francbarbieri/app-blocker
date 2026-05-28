@@ -5,6 +5,7 @@ import com.appblocker.domain.model.MotivationalMessage
 import com.appblocker.domain.model.UnblockOutcome
 import com.appblocker.domain.usecase.GetMotivationalMessageUseCase
 import com.appblocker.domain.usecase.RecordUsageUseCase
+import com.appblocker.domain.util.Clock
 import com.appblocker.presentation.fakes.FakeMotivationalMessageRepository
 import com.appblocker.presentation.fakes.FakeUsageRepository
 import com.appblocker.presentation.screen.BlockOverlayEvent
@@ -49,7 +50,7 @@ class BlockOverlayViewModelTest {
         val vm = BlockOverlayViewModel(
             packageName = packageName,
             appName = appName,
-            recordUsage = RecordUsageUseCase(usageRepo),
+            recordUsage = RecordUsageUseCase(usageRepo, Clock { 0L }),
             getMotivationalMessage = GetMotivationalMessageUseCase(motivRepo)
         )
         return vm to usageRepo

@@ -1,36 +1,35 @@
 package com.appblocker.presentation
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.appblocker.data.local.AppDatabase
-import com.appblocker.data.repository.BlockedAppRepositoryImpl
-import com.appblocker.data.repository.FocusSessionRepositoryImpl
+import com.appblocker.AppContainer
 import com.appblocker.domain.model.BlockedApp
 import com.appblocker.domain.model.FocusSession
 import com.appblocker.domain.usecase.AddBlockedAppUseCase
+import com.appblocker.domain.usecase.EndFocusSessionUseCase
 import com.appblocker.domain.usecase.GetAllBlockedAppsUseCase
+import com.appblocker.domain.usecase.ObserveLatestFocusSessionUseCase
 import com.appblocker.domain.usecase.RemoveBlockedAppUseCase
+import com.appblocker.domain.usecase.StartFocusSessionUseCase
 import com.appblocker.domain.usecase.ToggleBlockingUseCase
+import com.appblocker.domain.util.Clock
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 
-class MainViewModel(application: Application) : AndroidViewModel(application) {
-
-    private val database = AppDatabase.getInstance(application)
-    private val repository = BlockedAppRepositoryImpl(
-        database.blockedAppDao(),
-        database.scheduleDao()
-    )
-    private val focusSessionRepository = FocusSessionRepositoryImpl(database.focusSessionDao())
-
-    private val getAllBlockedApps = GetAllBlockedAppsUseCase(repository)
-    private val addBlockedApp = AddBlockedAppUseCase(repository)
-    private val removeBlockedApp = RemoveBlockedAppUseCase(repository)
-    private val toggleBlocking = ToggleBlockingUseCase(repository)
+class MainViewModel(
+    private val getAllBlockedApps: GetAllBlockedAppsUseCase,
+    private val addBlockedApp: AddBlockedAppUseCase,
+    private val removeBlockedApp: RemoveBlockedAppUseCase,
+    private val toggleBlocking: ToggleBlockingUseCase,
+    private val observeLatestFocusSession: ObserveLatestFocusSessionUseCase,
+    private val startFocusSessionUseCase: StartFocusSessionUseCase,
+    private val endFocusSessionUseCase: EndFocusSessionUseCase,
+    private val clock: Clock,
+) : ViewModel() {
 
     private val _blockedApps = MutableStateFlow<List<BlockedApp>>(emptyList())
     val blockedApps: StateFlow<List<BlockedApp>> = _blockedApps
@@ -41,7 +40,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _focusSession = MutableStateFlow<FocusSession?>(null)
     val focusSession: StateFlow<FocusSession?> = _focusSession
 
-    private val _now = MutableStateFlow(System.currentTimeMillis())
+    private val _now = MutableStateFlow(clock.nowMs())
     val now: StateFlow<Long> = _now
 
     init {
@@ -63,7 +62,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun observeFocusSession() {
         viewModelScope.launch {
-            focusSessionRepository.observeLatestOpenSession().collect { session ->
+            observeLatestFocusSession().collect { session ->
                 _focusSession.value = session
             }
         }
@@ -72,7 +71,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun startClockTick() {
         viewModelScope.launch {
             while (true) {
-                _now.value = System.currentTimeMillis()
+                _now.value = clock.nowMs()
                 delay(1_000)
             }
         }
@@ -98,13 +97,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startFocusSession(durationMs: Long?) {
         viewModelScope.launch {
-            focusSessionRepository.startSession(durationMs)
+            startFocusSessionUseCase(durationMs)
         }
     }
 
     fun endFocusSession() {
         viewModelScope.launch {
-            focusSessionRepository.endActiveSession()
+            endFocusSessionUseCase()
         }
+    }
+
+    class Factory(private val container: AppContainer) : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = MainViewModel(
+            getAllBlockedApps = container.getAllBlockedAppsUseCase,
+            addBlockedApp = container.addBlockedAppUseCase,
+            removeBlockedApp = container.removeBlockedAppUseCase,
+            toggleBlocking = container.toggleBlockingUseCase,
+            observeLatestFocusSession = container.observeLatestFocusSessionUseCase,
+            startFocusSessionUseCase = container.startFocusSessionUseCase,
+            endFocusSessionUseCase = container.endFocusSessionUseCase,
+            clock = container.clock,
+        ) as T
     }
 }

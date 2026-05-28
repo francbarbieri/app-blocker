@@ -32,7 +32,7 @@ import com.appblocker.data.local.entity.UsageSessionEntity
         MotivationalMessageEntity::class,
         FocusSessionEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -124,6 +124,19 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Replace single-column index with composite to cover the
+                // `WHERE app_package_name = ? ORDER BY timestamp DESC` and
+                // `WHERE app_package_name = ? AND timestamp >= ?` query paths.
+                db.execSQL("DROP INDEX IF EXISTS index_unblock_events_app_package_name")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_unblock_events_app_package_name_timestamp " +
+                        "ON unblock_events(app_package_name, timestamp)"
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -131,7 +144,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "app_blocker.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { INSTANCE = it }
             }

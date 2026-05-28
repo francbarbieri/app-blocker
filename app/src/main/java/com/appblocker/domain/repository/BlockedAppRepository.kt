@@ -9,6 +9,7 @@ interface BlockedAppRepository {
     suspend fun removeApp(app: BlockedApp)
     suspend fun getByPackageName(packageName: String): BlockedApp?
     fun getAllBlockedApps(): Flow<List<BlockedApp>>
+    fun observeEnabledBlockedPackageNames(): Flow<Set<String>>
     suspend fun isBlockingEnabled(packageName: String): Boolean
     suspend fun setBlockingEnabled(packageName: String, enabled: Boolean)
 

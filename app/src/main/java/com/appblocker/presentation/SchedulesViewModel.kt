@@ -1,13 +1,16 @@
 package com.appblocker.presentation
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.appblocker.data.local.AppDatabase
-import com.appblocker.data.repository.BlockedAppRepositoryImpl
+import com.appblocker.AppContainer
 import com.appblocker.domain.model.BlockedApp
 import com.appblocker.domain.model.Schedule
 import com.appblocker.domain.model.ScheduleType
+import com.appblocker.domain.usecase.DeleteScheduleUseCase
+import com.appblocker.domain.usecase.GetAllBlockedAppsUseCase
+import com.appblocker.domain.usecase.ObserveSchedulesUseCase
+import com.appblocker.domain.usecase.SaveScheduleUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,13 +47,12 @@ sealed interface EditorState {
     ) : EditorState
 }
 
-class SchedulesViewModel(application: Application) : AndroidViewModel(application) {
-
-    private val database = AppDatabase.getInstance(application)
-    private val repository = BlockedAppRepositoryImpl(
-        database.blockedAppDao(),
-        database.scheduleDao(),
-    )
+class SchedulesViewModel(
+    private val observeSchedules: ObserveSchedulesUseCase,
+    private val getAllBlockedApps: GetAllBlockedAppsUseCase,
+    private val saveSchedule: SaveScheduleUseCase,
+    private val deleteSchedule: DeleteScheduleUseCase,
+) : ViewModel() {
 
     private val _state = MutableStateFlow(SchedulesUiState())
     val state: StateFlow<SchedulesUiState> = _state.asStateFlow()
@@ -58,8 +60,8 @@ class SchedulesViewModel(application: Application) : AndroidViewModel(applicatio
     init {
         viewModelScope.launch {
             combine(
-                repository.getAllSchedules(),
-                repository.getAllBlockedApps(),
+                observeSchedules(),
+                getAllBlockedApps(),
             ) { schedules, blockedApps -> schedules to blockedApps }
                 .collect { (schedules, blockedApps) ->
                     _state.update {
@@ -139,10 +141,7 @@ class SchedulesViewModel(application: Application) : AndroidViewModel(applicatio
                 isActive = true,
                 days = editor.days.toList(),
             )
-            when (editor) {
-                is EditorState.Creating -> repository.addSchedule(schedule)
-                is EditorState.Editing -> repository.updateSchedule(schedule)
-            }
+            saveSchedule(schedule)
             _state.update { it.copy(editor = null) }
         }
     }
@@ -152,7 +151,7 @@ class SchedulesViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             val schedule = _state.value.schedules.firstOrNull { it.id == editor.id }
             if (schedule != null) {
-                repository.deleteSchedule(schedule)
+                deleteSchedule(schedule)
             }
             _state.update { it.copy(editor = null) }
         }
@@ -181,5 +180,15 @@ class SchedulesViewModel(application: Application) : AndroidViewModel(applicatio
             days = days,
             appPackageNames = appPackageNames,
         )
+    }
+
+    class Factory(private val container: AppContainer) : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = SchedulesViewModel(
+            observeSchedules = container.observeSchedulesUseCase,
+            getAllBlockedApps = container.getAllBlockedAppsUseCase,
+            saveSchedule = container.saveScheduleUseCase,
+            deleteSchedule = container.deleteScheduleUseCase,
+        ) as T
     }
 }

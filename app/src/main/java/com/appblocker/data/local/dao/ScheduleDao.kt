@@ -9,6 +9,7 @@ import androidx.room.Update
 import com.appblocker.data.local.entity.ScheduleAppEntity
 import com.appblocker.data.local.entity.ScheduleDayEntity
 import com.appblocker.data.local.entity.ScheduleEntity
+import com.appblocker.data.local.relation.ScheduleWithDaysAndApps
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -35,31 +36,25 @@ interface ScheduleDao {
     @Query("DELETE FROM schedule_apps WHERE schedule_id = :scheduleId")
     suspend fun deleteAppsForSchedule(scheduleId: Long)
 
+    @Transaction
     @Query("SELECT * FROM schedules ORDER BY id DESC")
-    fun getAllSchedules(): Flow<List<ScheduleEntity>>
+    fun getAllSchedulesWithDaysAndApps(): Flow<List<ScheduleWithDaysAndApps>>
 
+    @Transaction
     @Query(
         """SELECT s.* FROM schedules s
         INNER JOIN schedule_apps sa ON sa.schedule_id = s.id
         WHERE sa.app_package_name = :packageName"""
     )
-    fun getSchedulesForApp(packageName: String): Flow<List<ScheduleEntity>>
+    fun getSchedulesWithDaysAndAppsForApp(packageName: String): Flow<List<ScheduleWithDaysAndApps>>
 
+    @Transaction
     @Query(
         """SELECT s.* FROM schedules s
         INNER JOIN schedule_apps sa ON sa.schedule_id = s.id
         WHERE sa.app_package_name = :packageName AND s.is_active = 1"""
     )
-    suspend fun getActiveSchedulesForApp(packageName: String): List<ScheduleEntity>
-
-    @Query("SELECT * FROM schedule_days WHERE schedule_id = :scheduleId")
-    suspend fun getDaysForSchedule(scheduleId: Long): List<ScheduleDayEntity>
-
-    @Query("SELECT * FROM schedule_days WHERE schedule_id IN (:scheduleIds)")
-    suspend fun getDaysForSchedules(scheduleIds: List<Long>): List<ScheduleDayEntity>
-
-    @Query("SELECT * FROM schedule_apps WHERE schedule_id IN (:scheduleIds)")
-    suspend fun getAppsForSchedules(scheduleIds: List<Long>): List<ScheduleAppEntity>
+    suspend fun getActiveSchedulesWithDaysAndAppsForApp(packageName: String): List<ScheduleWithDaysAndApps>
 
     @Transaction
     suspend fun insertScheduleWithDaysAndApps(

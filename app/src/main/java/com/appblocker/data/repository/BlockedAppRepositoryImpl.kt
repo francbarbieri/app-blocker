@@ -4,6 +4,7 @@ import com.appblocker.data.local.dao.BlockedAppDao
 import com.appblocker.data.local.dao.ScheduleDao
 import com.appblocker.data.local.entity.BlockedAppEntity
 import com.appblocker.data.local.entity.ScheduleEntity
+import com.appblocker.data.local.relation.ScheduleWithDaysAndApps
 import com.appblocker.domain.model.BlockedApp
 import com.appblocker.domain.model.Schedule
 import com.appblocker.domain.model.ScheduleType
@@ -31,6 +32,15 @@ class BlockedAppRepositoryImpl(
     override fun getAllBlockedApps(): Flow<List<BlockedApp>> {
         return blockedAppDao.getAllBlockedApps().map { list ->
             list.map { it.toDomain() }
+        }
+    }
+
+    override fun observeEnabledBlockedPackageNames(): Flow<Set<String>> {
+        return blockedAppDao.getAllBlockedApps().map { list ->
+            list.asSequence()
+                .filter { it.isBlockingEnabled }
+                .map { it.packageName }
+                .toSet()
         }
     }
 
@@ -63,28 +73,26 @@ class BlockedAppRepositoryImpl(
     }
 
     override fun getAllSchedules(): Flow<List<Schedule>> {
-        return scheduleDao.getAllSchedules().map { entities -> entities.hydrate() }
+        return scheduleDao.getAllSchedulesWithDaysAndApps().map { list ->
+            list.map { it.toDomain() }
+        }
     }
 
     override fun getSchedulesForApp(packageName: String): Flow<List<Schedule>> {
-        return scheduleDao.getSchedulesForApp(packageName).map { entities -> entities.hydrate() }
+        return scheduleDao.getSchedulesWithDaysAndAppsForApp(packageName).map { list ->
+            list.map { it.toDomain() }
+        }
     }
 
     override suspend fun getActiveSchedulesForApp(packageName: String): List<Schedule> {
-        return scheduleDao.getActiveSchedulesForApp(packageName).hydrate()
+        return scheduleDao.getActiveSchedulesWithDaysAndAppsForApp(packageName)
+            .map { it.toDomain() }
     }
 
-    private suspend fun List<ScheduleEntity>.hydrate(): List<Schedule> {
-        if (isEmpty()) return emptyList()
-        val ids = map { it.id }
-        val daysByScheduleId = scheduleDao.getDaysForSchedules(ids).groupBy { it.scheduleId }
-        val appsByScheduleId = scheduleDao.getAppsForSchedules(ids).groupBy { it.scheduleId }
-        return map { entity ->
-            val days = daysByScheduleId[entity.id]?.map { it.dayOfWeek } ?: emptyList()
-            val apps = appsByScheduleId[entity.id]?.map { it.appPackageName } ?: emptyList()
-            entity.toDomain(apps, days)
-        }
-    }
+    private fun ScheduleWithDaysAndApps.toDomain(): Schedule = schedule.toDomain(
+        apps = apps.map { it.appPackageName },
+        days = days.map { it.dayOfWeek },
+    )
 
     private fun BlockedApp.toEntity() = BlockedAppEntity(
         packageName = packageName,

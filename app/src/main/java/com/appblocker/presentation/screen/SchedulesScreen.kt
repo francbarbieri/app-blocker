@@ -53,13 +53,17 @@ import com.appblocker.domain.model.Schedule
 import com.appblocker.domain.model.ScheduleType
 import com.appblocker.presentation.EditorState
 import com.appblocker.presentation.SchedulesUiState
+import androidx.compose.ui.platform.LocalContext
+import com.appblocker.appContainer
 import com.appblocker.presentation.SchedulesViewModel
 import com.appblocker.presentation.theme.AppBlockerTheme
 
 @Composable
 fun SchedulesScreen(
     modifier: Modifier = Modifier,
-    viewModel: SchedulesViewModel = viewModel(),
+    viewModel: SchedulesViewModel = viewModel(
+        factory = SchedulesViewModel.Factory(LocalContext.current.appContainer)
+    ),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
