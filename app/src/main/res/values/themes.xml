@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        The UI is always dark (see AppBlockerTheme), so the window must be dark
+        too. Otherwise the window background flashes white before Compose draws,
+        for example while the block overlay's task animates in.
+    -->
+    <style name="Theme.AppBlocker" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="colorPrimary">#D0BCFF</item>
+        <item name="colorPrimaryVariant">#4F378B</item>
+        <item name="colorOnPrimary">#381E72</item>
+    </style>
+</resources>

@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -50,12 +51,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.appblocker.domain.model.BlockReason
 import com.appblocker.presentation.theme.AppBlockerTheme
 import kotlinx.coroutines.delay
 
 @Composable
 fun BlockOverlayScreen(
     state: BlockOverlayUiState,
+    reason: BlockReason?,
+    graceMinutes: Int,
     onSkipBreath: () -> Unit,
     onLegitimate: () -> Unit,
     onBreakingPlan: () -> Unit,
@@ -70,6 +74,7 @@ fun BlockOverlayScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .systemBarsPadding()
                 .padding(horizontal = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
@@ -93,16 +98,20 @@ fun BlockOverlayScreen(
                         is BlockOverlayUiState.BreathingPause -> BreathingPauseContent(
                             appName = current.appName,
                             secondsRemaining = current.secondsRemaining,
+                            reason = reason,
                             onSkip = onSkipBreath,
                         )
                         is BlockOverlayUiState.Confirmation -> ConfirmationContent(
                             appName = current.appName,
+                            reason = reason,
+                            graceMinutes = graceMinutes,
                             onLegitimate = onLegitimate,
                             onBreakingPlan = onBreakingPlan,
                         )
                         is BlockOverlayUiState.Motivational -> MotivationalContent(
                             appName = current.appName,
                             message = current.message,
+                            graceMinutes = graceMinutes,
                             onGoBack = onGoBack,
                             onProceed = onProceed,
                         )
@@ -117,6 +126,7 @@ fun BlockOverlayScreen(
 private fun BreathingPauseContent(
     appName: String,
     secondsRemaining: Int,
+    reason: BlockReason?,
     onSkip: () -> Unit,
 ) {
     val breathing = rememberInfiniteTransition(label = "breathing")
@@ -152,6 +162,11 @@ private fun BreathingPauseContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
+
+        if (reason != null) {
+            Spacer(modifier = Modifier.height(16.dp))
+            ReasonPill(reason = reason)
+        }
 
         Spacer(modifier = Modifier.height(40.dp))
 
@@ -200,6 +215,8 @@ private fun BreathingPauseContent(
 @Composable
 private fun ConfirmationContent(
     appName: String,
+    reason: BlockReason?,
+    graceMinutes: Int,
     onLegitimate: () -> Unit,
     onBreakingPlan: () -> Unit,
 ) {
@@ -213,7 +230,7 @@ private fun ConfirmationContent(
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         TypewriterText(
-            text = "Opening before your planned time?",
+            text = confirmationQuestion(reason),
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
@@ -237,7 +254,7 @@ private fun ConfirmationContent(
             enabled = subtitleDone,
             modifier = Modifier.alpha(buttonsAlpha),
         ) {
-            Text(text = "No, this is planned")
+            Text(text = "This is planned")
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -247,9 +264,54 @@ private fun ConfirmationContent(
             enabled = subtitleDone,
             modifier = Modifier.alpha(buttonsAlpha),
         ) {
-            Text(text = "Yes, I'm breaking my plan")
+            Text(text = "I'm breaking my plan")
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "Opening gives you $graceMinutes minutes before the next check-in.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.alpha(buttonsAlpha),
+        )
     }
+}
+
+@Composable
+private fun ReasonPill(reason: BlockReason) {
+    Surface(
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Text(
+            text = describeBlockReason(reason),
+            style = MaterialTheme.typography.labelLarge,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+    }
+}
+
+/** One-line explanation of why the overlay appeared. */
+internal fun describeBlockReason(reason: BlockReason): String = when (reason) {
+    BlockReason.FocusSession -> "Focus session in progress"
+    BlockReason.AlwaysBlocked -> "On your block list"
+    is BlockReason.ScheduledWindow ->
+        reason.until?.let { "Scheduled block until $it" } ?: "Scheduled block all day"
+    is BlockReason.DailyLimitReached ->
+        "Daily limit of ${formatMinutesLabel(reason.limitMinutes)} reached"
+}
+
+// The two answers ("This is planned" / "I'm breaking my plan") are statements,
+// not yes/no replies, so every question below reads correctly with them.
+private fun confirmationQuestion(reason: BlockReason?): String = when (reason) {
+    BlockReason.FocusSession -> "You're in a focus session. Is this planned?"
+    is BlockReason.DailyLimitReached -> "You've used today's time. Is this planned?"
+    is BlockReason.ScheduledWindow -> "Opening before your planned time?"
+    BlockReason.AlwaysBlocked, null -> "Is this a planned visit?"
 }
 
 @Composable
@@ -294,6 +356,7 @@ private fun TypewriterText(
 private fun MotivationalContent(
     appName: String,
     message: String,
+    graceMinutes: Int,
     onGoBack: () -> Unit,
     onProceed: () -> Unit,
 ) {
@@ -353,7 +416,7 @@ private fun MotivationalContent(
             modifier = Modifier.alpha(buttonsAlpha),
         ) {
             Text(
-                text = "Proceed Anyway",
+                text = "Open anyway for $graceMinutes min",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -366,6 +429,8 @@ private fun BreathingPausePreview() {
     AppBlockerTheme {
         BlockOverlayScreen(
             state = BlockOverlayUiState.BreathingPause(appName = "Instagram", secondsRemaining = 4),
+            reason = BlockReason.ScheduledWindow(until = "17:00"),
+            graceMinutes = 5,
             onSkipBreath = {},
             onLegitimate = {},
             onBreakingPlan = {},
@@ -381,6 +446,8 @@ private fun BreathingPauseDarkPreview() {
     AppBlockerTheme {
         BlockOverlayScreen(
             state = BlockOverlayUiState.BreathingPause(appName = "Instagram", secondsRemaining = 4),
+            reason = BlockReason.ScheduledWindow(until = "17:00"),
+            graceMinutes = 5,
             onSkipBreath = {},
             onLegitimate = {},
             onBreakingPlan = {},
@@ -396,6 +463,8 @@ private fun ConfirmationPreview() {
     AppBlockerTheme {
         BlockOverlayScreen(
             state = BlockOverlayUiState.Confirmation(appName = "Instagram"),
+            reason = BlockReason.DailyLimitReached(limitMinutes = 30),
+            graceMinutes = 5,
             onSkipBreath = {},
             onLegitimate = {},
             onBreakingPlan = {},
@@ -411,6 +480,8 @@ private fun ConfirmationDarkPreview() {
     AppBlockerTheme {
         BlockOverlayScreen(
             state = BlockOverlayUiState.Confirmation(appName = "Instagram"),
+            reason = BlockReason.DailyLimitReached(limitMinutes = 30),
+            graceMinutes = 5,
             onSkipBreath = {},
             onLegitimate = {},
             onBreakingPlan = {},
@@ -429,6 +500,8 @@ private fun MotivationalPreview() {
                 appName = "Instagram",
                 message = "You've got this. Every moment you resist builds the life you want.",
             ),
+            reason = BlockReason.FocusSession,
+            graceMinutes = 5,
             onSkipBreath = {},
             onLegitimate = {},
             onBreakingPlan = {},
@@ -447,6 +520,8 @@ private fun MotivationalDarkPreview() {
                 appName = "Instagram",
                 message = "You've got this. Every moment you resist builds the life you want.",
             ),
+            reason = BlockReason.FocusSession,
+            graceMinutes = 5,
             onSkipBreath = {},
             onLegitimate = {},
             onBreakingPlan = {},

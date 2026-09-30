@@ -4,15 +4,15 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import com.appblocker.presentation.screen.OnboardingScreen
 import com.appblocker.presentation.theme.AppBlockerTheme
+import com.appblocker.presentation.theme.enableDarkEdgeToEdge
 
 class OnboardingActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableDarkEdgeToEdge()
         setContent {
             AppBlockerTheme {
                 OnboardingScreen(

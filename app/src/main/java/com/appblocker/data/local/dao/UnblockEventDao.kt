@@ -25,4 +25,11 @@ interface UnblockEventDao {
         AND timestamp >= :sinceEpochMs"""
     )
     suspend fun getEventCountSince(packageName: String, sinceEpochMs: Long): Int
+
+    @Query(
+        """SELECT * FROM unblock_events
+        WHERE timestamp >= :fromMs AND timestamp < :toMs
+        ORDER BY timestamp ASC"""
+    )
+    fun observeEventsBetween(fromMs: Long, toMs: Long): Flow<List<UnblockEventEntity>>
 }

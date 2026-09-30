@@ -66,6 +66,9 @@ private class InMemoryUnblockEventDao : UnblockEventDao {
 
     override suspend fun getEventCountSince(packageName: String, sinceEpochMs: Long): Int =
         events.value.count { it.appPackageName == packageName && it.timestamp >= sinceEpochMs }
+
+    override fun observeEventsBetween(fromMs: Long, toMs: Long): Flow<List<UnblockEventEntity>> =
+        events.map { list -> list.filter { it.timestamp in fromMs until toMs } }
 }
 
 private class NoopUsageSessionDao : UsageSessionDao {
@@ -73,7 +76,8 @@ private class NoopUsageSessionDao : UsageSessionDao {
     override suspend fun updateEndTime(sessionId: Long, endTime: Long) = Unit
     override fun getSessionsForApp(packageName: String, startEpochMs: Long, endEpochMs: Long):
         Flow<List<UsageSessionEntity>> = MutableStateFlow(emptyList())
-    override suspend fun getTodayTotalDurationMs(packageName: String, dayStartEpochMs: Long): Long = 0L
-    override suspend fun getTotalDurationForRange(packageName: String, startEpochMs: Long, endEpochMs: Long): Long = 0L
+    override suspend fun getUsageMs(packageNames: List<String>, fromMs: Long, toMs: Long): Long = 0L
+    override fun observeSessionsOverlapping(fromMs: Long, toMs: Long):
+        Flow<List<UsageSessionEntity>> = MutableStateFlow(emptyList())
     override suspend fun getTodaySessionCount(packageName: String, dayStartEpochMs: Long): Int = 0
 }

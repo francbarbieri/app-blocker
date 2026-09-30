@@ -20,12 +20,14 @@ class UsageRepositoryImpl(
         return usageSessionDao.insert(
             UsageSessionEntity(
                 appPackageName = appPackageName,
-                startTime = startTime
+                startTime = startTime,
+                endTime = startTime,
+                durationMs = 0L,
             )
         )
     }
 
-    override suspend fun endSession(sessionId: Long, endTime: Long) {
+    override suspend fun updateSessionEnd(sessionId: Long, endTime: Long) {
         usageSessionDao.updateEndTime(sessionId, endTime)
     }
 
@@ -38,8 +40,14 @@ class UsageRepositoryImpl(
             .map { list -> list.map { it.toDomain() } }
     }
 
-    override suspend fun getTodayTotalDurationMs(packageName: String, dayStartEpochMs: Long): Long {
-        return usageSessionDao.getTodayTotalDurationMs(packageName, dayStartEpochMs)
+    override suspend fun getUsageMs(packageNames: Collection<String>, fromMs: Long, toMs: Long): Long {
+        if (toMs <= fromMs || packageNames.isEmpty()) return 0L
+        return usageSessionDao.getUsageMs(packageNames.distinct(), fromMs, toMs)
+    }
+
+    override fun observeSessionsOverlapping(fromMs: Long, toMs: Long): Flow<List<UsageSession>> {
+        return usageSessionDao.observeSessionsOverlapping(fromMs, toMs)
+            .map { list -> list.map { it.toDomain() } }
     }
 
     override suspend fun getTodaySessionCount(packageName: String, dayStartEpochMs: Long): Int {
@@ -57,6 +65,11 @@ class UsageRepositoryImpl(
 
     override suspend fun getUnblockEventCountSince(packageName: String, sinceEpochMs: Long): Int {
         return unblockEventDao.getEventCountSince(packageName, sinceEpochMs)
+    }
+
+    override fun observeUnblockEventsBetween(fromMs: Long, toMs: Long): Flow<List<UnblockEvent>> {
+        return unblockEventDao.observeEventsBetween(fromMs, toMs)
+            .map { list -> list.map { it.toDomain() } }
     }
 
     private fun UsageSessionEntity.toDomain() = UsageSession(

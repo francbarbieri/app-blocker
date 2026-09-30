@@ -34,6 +34,10 @@ class BlockOverlayViewModel(
 
     private var countdownJob: Job? = null
 
+    // Set once the user has made a decision, so a double tap (or a back press
+    // racing a button) cannot record two outcomes for one overlay.
+    private var decided = false
+
     init {
         countdownJob = viewModelScope.launch {
             while (true) {
@@ -62,7 +66,7 @@ class BlockOverlayViewModel(
     fun onBreakingPlan() {
         viewModelScope.launch {
             val message = try {
-                getMotivationalMessage(packageName)?.message ?: FALLBACK_MESSAGE
+                getMotivationalMessage(packageName)
             } catch (t: Throwable) {
                 android.util.Log.w(TAG, "Failed to load motivational message", t)
                 FALLBACK_MESSAGE
@@ -71,36 +75,31 @@ class BlockOverlayViewModel(
         }
     }
 
-    fun onLegitimate() {
-        viewModelScope.launch {
-            try {
-                recordUsage.recordUnblock(packageName, UnblockOutcome.LEGITIMATE)
-            } catch (t: Throwable) {
-                android.util.Log.w(TAG, "Failed to record unblock outcome", t)
-            }
-            _events.send(BlockOverlayEvent.GrantGraceAndClose)
-        }
+    fun onLegitimate() = decide(UnblockOutcome.LEGITIMATE, BlockOverlayEvent.GrantGraceAndClose)
+
+    fun onGoBack() = decide(UnblockOutcome.BACKED_OFF, BlockOverlayEvent.GoHome)
+
+    fun onProceed() = decide(UnblockOutcome.BROKE_PLAN_PROCEEDED, BlockOverlayEvent.GrantGraceAndClose)
+
+    /**
+     * Back pressed before the user reached the motivational step. Leaving
+     * without opening the app is the best outcome, so it counts as walking away.
+     */
+    fun onDismissToHome() {
+        countdownJob?.cancel()
+        decide(UnblockOutcome.BACKED_OFF, BlockOverlayEvent.GoHome)
     }
 
-    fun onGoBack() {
+    private fun decide(outcome: UnblockOutcome, event: BlockOverlayEvent) {
+        if (decided) return
+        decided = true
         viewModelScope.launch {
             try {
-                recordUsage.recordUnblock(packageName, UnblockOutcome.BACKED_OFF)
+                recordUsage.recordUnblock(packageName, outcome)
             } catch (t: Throwable) {
                 android.util.Log.w(TAG, "Failed to record unblock outcome", t)
             }
-            _events.send(BlockOverlayEvent.GoHome)
-        }
-    }
-
-    fun onProceed() {
-        viewModelScope.launch {
-            try {
-                recordUsage.recordUnblock(packageName, UnblockOutcome.BROKE_PLAN_PROCEEDED)
-            } catch (t: Throwable) {
-                android.util.Log.w(TAG, "Failed to record unblock outcome", t)
-            }
-            _events.send(BlockOverlayEvent.GrantGraceAndClose)
+            _events.send(event)
         }
     }
 

@@ -48,13 +48,14 @@ interface ScheduleDao {
     )
     fun getSchedulesWithDaysAndAppsForApp(packageName: String): Flow<List<ScheduleWithDaysAndApps>>
 
+    /** Every schedule (active and paused) that lists [packageName]. */
     @Transaction
     @Query(
         """SELECT s.* FROM schedules s
         INNER JOIN schedule_apps sa ON sa.schedule_id = s.id
-        WHERE sa.app_package_name = :packageName AND s.is_active = 1"""
+        WHERE sa.app_package_name = :packageName"""
     )
-    suspend fun getActiveSchedulesWithDaysAndAppsForApp(packageName: String): List<ScheduleWithDaysAndApps>
+    suspend fun getAllSchedulesWithDaysAndAppsForApp(packageName: String): List<ScheduleWithDaysAndApps>
 
     @Transaction
     suspend fun insertScheduleWithDaysAndApps(

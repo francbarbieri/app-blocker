@@ -13,8 +13,14 @@ class RecordUsageUseCase(
         return repository.startSession(packageName, clock.nowMs())
     }
 
+    /** Heartbeat: the app is still in the foreground, so extend the session to now. */
+    suspend fun extendSession(sessionId: Long) {
+        repository.updateSessionEnd(sessionId, clock.nowMs())
+    }
+
+    /** The app left the foreground; close the session at now. */
     suspend fun endSession(sessionId: Long) {
-        repository.endSession(sessionId, clock.nowMs())
+        repository.updateSessionEnd(sessionId, clock.nowMs())
     }
 
     suspend fun recordUnblock(packageName: String, outcome: UnblockOutcome) {

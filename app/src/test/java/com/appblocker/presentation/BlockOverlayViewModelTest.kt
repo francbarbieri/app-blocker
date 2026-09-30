@@ -1,6 +1,7 @@
 package com.appblocker.presentation
 
 import app.cash.turbine.test
+import com.appblocker.domain.model.DefaultMotivationalMessages
 import com.appblocker.domain.model.MotivationalMessage
 import com.appblocker.domain.model.UnblockOutcome
 import com.appblocker.domain.usecase.GetMotivationalMessageUseCase
@@ -118,13 +119,41 @@ class BlockOverlayViewModelTest {
         }
 
     @Test
-    fun `onBreakingPlan with no message uses the fallback string`() = runTest(dispatcher) {
+    fun `onBreakingPlan with no user message shows a built-in one`() = runTest(dispatcher) {
         val (vm, _) = viewModel(message = null)
         vm.onSkipBreath()
         vm.onBreakingPlan()
         advanceUntilIdle()
         val state = vm.state.value as BlockOverlayUiState.Motivational
-        assertEquals("You've got this! Stay focused.", state.message)
+        assertTrue(state.message in DefaultMotivationalMessages.all)
+    }
+
+    @Test
+    fun `back during the breathing pause records BACKED_OFF and goes home`() = runTest(dispatcher) {
+        val (vm, usageRepo) = viewModel()
+        vm.events.test {
+            vm.onDismissToHome()
+            advanceUntilIdle()
+            assertEquals(BlockOverlayEvent.GoHome, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertEquals(listOf(UnblockOutcome.BACKED_OFF), usageRepo.recordedEvents.map { it.outcome })
+    }
+
+    @Test
+    fun `only the first decision is recorded`() = runTest(dispatcher) {
+        val (vm, usageRepo) = viewModel()
+        vm.onSkipBreath()
+        vm.events.test {
+            vm.onLegitimate()
+            vm.onLegitimate()
+            vm.onDismissToHome()
+            advanceUntilIdle()
+            assertEquals(BlockOverlayEvent.GrantGraceAndClose, awaitItem())
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertEquals(listOf(UnblockOutcome.LEGITIMATE), usageRepo.recordedEvents.map { it.outcome })
     }
 
     @Test

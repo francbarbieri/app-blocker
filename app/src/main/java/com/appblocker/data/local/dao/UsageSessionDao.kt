@@ -27,23 +27,29 @@ interface UsageSessionDao {
         endEpochMs: Long
     ): Flow<List<UsageSessionEntity>>
 
+    /**
+     * Combined foreground time of [packageNames] inside [fromMs, toMs). Each
+     * session is clipped to the range, so a session that started before
+     * midnight only counts its after-midnight part toward "today".
+     */
     @Query(
-        """SELECT COALESCE(SUM(duration_ms), 0) FROM usage_sessions
-        WHERE app_package_name = :packageName
-        AND start_time >= :dayStartEpochMs"""
+        """SELECT COALESCE(SUM(MIN(end_time, :toMs) - MAX(start_time, :fromMs)), 0)
+        FROM usage_sessions
+        WHERE app_package_name IN (:packageNames)
+        AND end_time IS NOT NULL
+        AND end_time > :fromMs
+        AND start_time < :toMs"""
     )
-    suspend fun getTodayTotalDurationMs(packageName: String, dayStartEpochMs: Long): Long
+    suspend fun getUsageMs(packageNames: List<String>, fromMs: Long, toMs: Long): Long
 
     @Query(
-        """SELECT COALESCE(SUM(duration_ms), 0) FROM usage_sessions
-        WHERE app_package_name = :packageName
-        AND start_time >= :startEpochMs AND start_time <= :endEpochMs"""
+        """SELECT * FROM usage_sessions
+        WHERE end_time IS NOT NULL
+        AND end_time > :fromMs
+        AND start_time < :toMs
+        ORDER BY start_time ASC"""
     )
-    suspend fun getTotalDurationForRange(
-        packageName: String,
-        startEpochMs: Long,
-        endEpochMs: Long
-    ): Long
+    fun observeSessionsOverlapping(fromMs: Long, toMs: Long): Flow<List<UsageSessionEntity>>
 
     @Query(
         """SELECT COUNT(*) FROM usage_sessions

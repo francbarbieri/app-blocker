@@ -18,5 +18,11 @@ interface BlockedAppRepository {
     suspend fun deleteSchedule(schedule: Schedule)
     fun getAllSchedules(): Flow<List<Schedule>>
     fun getSchedulesForApp(packageName: String): Flow<List<Schedule>>
-    suspend fun getActiveSchedulesForApp(packageName: String): List<Schedule>
+
+    /**
+     * Every schedule that lists [packageName], paused ones included. Callers
+     * need the paused ones to tell "no schedules" (always blocked) apart from
+     * "only paused schedules" (not blocked by a schedule right now).
+     */
+    suspend fun getAllSchedulesForApp(packageName: String): List<Schedule>
 }

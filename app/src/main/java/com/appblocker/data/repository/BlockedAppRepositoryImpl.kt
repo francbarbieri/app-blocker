@@ -84,8 +84,8 @@ class BlockedAppRepositoryImpl(
         }
     }
 
-    override suspend fun getActiveSchedulesForApp(packageName: String): List<Schedule> {
-        return scheduleDao.getActiveSchedulesWithDaysAndAppsForApp(packageName)
+    override suspend fun getAllSchedulesForApp(packageName: String): List<Schedule> {
+        return scheduleDao.getAllSchedulesWithDaysAndAppsForApp(packageName)
             .map { it.toDomain() }
     }
 

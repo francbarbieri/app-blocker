@@ -88,7 +88,7 @@ class ObserveEnabledBlockedPackagesUseCaseTest {
         override suspend fun deleteSchedule(schedule: Schedule) = unsupported()
         override fun getAllSchedules(): Flow<List<Schedule>> = unsupported()
         override fun getSchedulesForApp(packageName: String): Flow<List<Schedule>> = unsupported()
-        override suspend fun getActiveSchedulesForApp(packageName: String): List<Schedule> = unsupported()
+        override suspend fun getAllSchedulesForApp(packageName: String): List<Schedule> = unsupported()
 
         private fun unsupported(): Nothing =
             throw UnsupportedOperationException("Not used by this test")
