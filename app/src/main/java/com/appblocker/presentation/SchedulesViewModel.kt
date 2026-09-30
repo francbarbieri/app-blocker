@@ -25,26 +25,31 @@ data class SchedulesUiState(
     val editor: EditorState? = null,
 )
 
-sealed interface EditorState {
-    val startTime: String
-    val endTime: String
-    val days: Set<Int>
-    val appPackageNames: Set<String>
+/**
+ * The schedule being created ([id] == null) or edited. Both schedule types keep
+ * their fields while the user flips between them, so switching back and forth
+ * never loses input.
+ */
+data class EditorState(
+    val id: Long? = null,
+    val type: ScheduleType = ScheduleType.TIME_WINDOW,
+    val startTime: String = "09:00",
+    val endTime: String = "17:00",
+    val dailyLimitMinutes: Int = DEFAULT_DAILY_LIMIT_MINUTES,
+    val days: Set<Int> = emptySet(),
+    val appPackageNames: Set<String> = emptySet(),
+    val isActive: Boolean = true,
+) {
+    val isEditing: Boolean get() = id != null
 
-    data class Creating(
-        override val startTime: String = "09:00",
-        override val endTime: String = "17:00",
-        override val days: Set<Int> = emptySet(),
-        override val appPackageNames: Set<String> = emptySet(),
-    ) : EditorState
+    val canSave: Boolean
+        get() = appPackageNames.isNotEmpty() &&
+            (type != ScheduleType.DAILY_LIMIT || dailyLimitMinutes in DAILY_LIMIT_RANGE)
 
-    data class Editing(
-        val id: Long,
-        override val startTime: String,
-        override val endTime: String,
-        override val days: Set<Int>,
-        override val appPackageNames: Set<String>,
-    ) : EditorState
+    companion object {
+        const val DEFAULT_DAILY_LIMIT_MINUTES = 30
+        val DAILY_LIMIT_RANGE = 5..720
+    }
 }
 
 class SchedulesViewModel(
@@ -76,18 +81,22 @@ class SchedulesViewModel(
     }
 
     fun startCreating() {
-        _state.update { it.copy(editor = EditorState.Creating()) }
+        _state.update { it.copy(editor = EditorState()) }
     }
 
     fun startEditing(schedule: Schedule) {
         _state.update {
             it.copy(
-                editor = EditorState.Editing(
+                editor = EditorState(
                     id = schedule.id,
+                    type = schedule.scheduleType,
                     startTime = schedule.startTime ?: "09:00",
                     endTime = schedule.endTime ?: "17:00",
+                    dailyLimitMinutes = schedule.dailyLimitMinutes
+                        ?: EditorState.DEFAULT_DAILY_LIMIT_MINUTES,
                     days = schedule.days.toSet(),
                     appPackageNames = schedule.appPackageNames.toSet(),
+                    isActive = schedule.isActive,
                 ),
             )
         }
@@ -97,89 +106,63 @@ class SchedulesViewModel(
         _state.update { it.copy(editor = null) }
     }
 
-    fun updateStartTime(time: String) {
-        _state.update { it.withEditor { e -> e.copyWith(startTime = time) } }
+    fun updateType(type: ScheduleType) = updateEditor { it.copy(type = type) }
+
+    fun updateStartTime(time: String) = updateEditor { it.copy(startTime = time) }
+
+    fun updateEndTime(time: String) = updateEditor { it.copy(endTime = time) }
+
+    fun updateDailyLimit(minutes: Int) = updateEditor {
+        it.copy(dailyLimitMinutes = minutes.coerceIn(EditorState.DAILY_LIMIT_RANGE))
     }
 
-    fun updateEndTime(time: String) {
-        _state.update { it.withEditor { e -> e.copyWith(endTime = time) } }
+    fun toggleDay(day: Int) = updateEditor {
+        it.copy(days = if (day in it.days) it.days - day else it.days + day)
     }
 
-    fun toggleDay(day: Int) {
-        _state.update {
-            it.withEditor { e ->
-                val newDays = if (day in e.days) e.days - day else e.days + day
-                e.copyWith(days = newDays)
-            }
-        }
-    }
-
-    fun toggleApp(packageName: String) {
-        _state.update {
-            it.withEditor { e ->
-                val newApps = if (packageName in e.appPackageNames) {
-                    e.appPackageNames - packageName
-                } else {
-                    e.appPackageNames + packageName
-                }
-                e.copyWith(appPackageNames = newApps)
-            }
-        }
+    fun toggleApp(packageName: String) = updateEditor {
+        val apps = it.appPackageNames
+        it.copy(appPackageNames = if (packageName in apps) apps - packageName else apps + packageName)
     }
 
     fun saveEditor() {
         val editor = _state.value.editor ?: return
-        if (editor.appPackageNames.isEmpty()) return
-        viewModelScope.launch {
-            val schedule = Schedule(
-                id = (editor as? EditorState.Editing)?.id ?: 0L,
-                appPackageNames = editor.appPackageNames.toList(),
-                scheduleType = ScheduleType.TIME_WINDOW,
-                startTime = editor.startTime,
-                endTime = editor.endTime,
-                dailyLimitMinutes = null,
-                isActive = true,
-                days = editor.days.toList(),
-            )
-            saveSchedule(schedule)
-            _state.update { it.copy(editor = null) }
-        }
+        if (!editor.canSave) return
+        val isWindow = editor.type == ScheduleType.TIME_WINDOW
+        val schedule = Schedule(
+            id = editor.id ?: 0L,
+            appPackageNames = editor.appPackageNames.toList(),
+            scheduleType = editor.type,
+            startTime = if (isWindow) editor.startTime else null,
+            endTime = if (isWindow) editor.endTime else null,
+            dailyLimitMinutes = if (isWindow) null else editor.dailyLimitMinutes,
+            isActive = editor.isActive,
+            days = editor.days.sorted(),
+        )
+        _state.update { it.copy(editor = null) }
+        viewModelScope.launch { saveSchedule(schedule) }
     }
 
     fun deleteEditing() {
-        val editor = _state.value.editor as? EditorState.Editing ?: return
-        viewModelScope.launch {
-            val schedule = _state.value.schedules.firstOrNull { it.id == editor.id }
-            if (schedule != null) {
-                deleteSchedule(schedule)
-            }
-            _state.update { it.copy(editor = null) }
+        val id = _state.value.editor?.id ?: return
+        val schedule = _state.value.schedules.firstOrNull { it.id == id }
+        _state.update { it.copy(editor = null) }
+        if (schedule != null) {
+            viewModelScope.launch { deleteSchedule(schedule) }
         }
     }
 
-    private inline fun SchedulesUiState.withEditor(transform: (EditorState) -> EditorState): SchedulesUiState {
-        val current = editor ?: return this
-        return copy(editor = transform(current))
+    /** Pauses or resumes a schedule straight from the list. */
+    fun setScheduleActive(schedule: Schedule, active: Boolean) {
+        if (schedule.isActive == active) return
+        viewModelScope.launch { saveSchedule(schedule.copy(isActive = active)) }
     }
 
-    private fun EditorState.copyWith(
-        startTime: String = this.startTime,
-        endTime: String = this.endTime,
-        days: Set<Int> = this.days,
-        appPackageNames: Set<String> = this.appPackageNames,
-    ): EditorState = when (this) {
-        is EditorState.Creating -> copy(
-            startTime = startTime,
-            endTime = endTime,
-            days = days,
-            appPackageNames = appPackageNames,
-        )
-        is EditorState.Editing -> copy(
-            startTime = startTime,
-            endTime = endTime,
-            days = days,
-            appPackageNames = appPackageNames,
-        )
+    private inline fun updateEditor(crossinline transform: (EditorState) -> EditorState) {
+        _state.update { state ->
+            val editor = state.editor ?: return@update state
+            state.copy(editor = transform(editor))
+        }
     }
 
     class Factory(private val container: AppContainer) : ViewModelProvider.Factory {
