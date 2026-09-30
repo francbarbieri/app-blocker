@@ -1,6 +1,5 @@
 package com.appblocker.presentation.components
 
-import android.graphics.drawable.Drawable
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -28,15 +27,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.drawable.toBitmap
 import com.appblocker.domain.model.BlockedApp
 import com.appblocker.presentation.theme.AppBlockerTheme
 
@@ -168,18 +163,6 @@ private fun BlockedAppCard(
  * Loads an app icon from the PackageManager and converts it to an [ImageBitmap].
  * Returns null if the icon cannot be loaded (e.g. in preview or if the package is missing).
  */
-@Composable
-private fun rememberAppIcon(packageName: String): ImageBitmap? {
-    val context = LocalContext.current
-    return remember(packageName) {
-        try {
-            val drawable: Drawable = context.packageManager.getApplicationIcon(packageName)
-            drawable.toBitmap(width = 96, height = 96).asImageBitmap()
-        } catch (_: Exception) {
-            null
-        }
-    }
-}
 
 // region Previews
 

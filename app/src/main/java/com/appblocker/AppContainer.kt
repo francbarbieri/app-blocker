@@ -19,6 +19,7 @@ import com.appblocker.domain.usecase.IsAppBlockedUseCase
 import com.appblocker.domain.usecase.IsAppOnActiveScheduleUseCase
 import com.appblocker.domain.usecase.IsFocusSessionActiveUseCase
 import com.appblocker.domain.usecase.ObserveEnabledBlockedPackagesUseCase
+import com.appblocker.domain.usecase.ObserveActivitySummaryUseCase
 import com.appblocker.domain.usecase.ObserveLatestFocusSessionUseCase
 import com.appblocker.domain.usecase.ObserveSchedulesUseCase
 import com.appblocker.domain.usecase.RecordUsageUseCase
@@ -80,6 +81,12 @@ class AppContainer(context: Context) {
         ObserveLatestFocusSessionUseCase(focusSessionRepository)
     val startFocusSessionUseCase = StartFocusSessionUseCase(focusSessionRepository)
     val endFocusSessionUseCase = EndFocusSessionUseCase(focusSessionRepository)
+
+    val observeActivitySummaryUseCase = ObserveActivitySummaryUseCase(
+        usageRepository,
+        blockedAppRepository,
+        clock,
+    )
 
     val observeSchedulesUseCase = ObserveSchedulesUseCase(blockedAppRepository)
     val saveScheduleUseCase = SaveScheduleUseCase(blockedAppRepository)

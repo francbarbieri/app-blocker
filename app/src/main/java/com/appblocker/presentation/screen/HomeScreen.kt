@@ -1,6 +1,5 @@
 package com.appblocker.presentation.screen
 
-import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -42,15 +41,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.drawable.toBitmap
 import com.appblocker.domain.model.BlockedApp
 import com.appblocker.domain.model.FocusSession
+import com.appblocker.presentation.components.rememberAppIcon
 import com.appblocker.presentation.theme.AppBlockerTheme
 
 @Composable
@@ -61,8 +57,10 @@ fun HomeScreen(
     nowMs: Long,
     onStartFocus: (Long?) -> Unit,
     onEndFocus: () -> Unit,
+    onTurnOnBlocking: () -> Unit,
     onNavigateToApps: () -> Unit,
     onNavigateToSchedules: () -> Unit,
+    onNavigateToActivity: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -78,6 +76,7 @@ fun HomeScreen(
             blockedApps = activeApps,
             isAccessibilityEnabled = isAccessibilityEnabled,
             onClick = onNavigateToApps,
+            onTurnOnBlocking = onTurnOnBlocking,
         )
 
         FocusSessionCard(
@@ -98,8 +97,8 @@ fun HomeScreen(
         FeatureCard(
             icon = Icons.Outlined.BarChart,
             title = "Activity",
-            description = "Track your screen time and habits",
-            onClick = { /* placeholder */ },
+            description = "Time in blocked apps and how often you walked away",
+            onClick = onNavigateToActivity,
         )
     }
 }
@@ -251,6 +250,7 @@ private fun HeroSummaryCard(
     blockedApps: List<BlockedApp>,
     isAccessibilityEnabled: Boolean,
     onClick: () -> Unit,
+    onTurnOnBlocking: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     ElevatedCard(
@@ -279,7 +279,11 @@ private fun HeroSummaryCard(
             Spacer(modifier = Modifier.height(12.dp))
 
             Text(
-                text = "${blockedApps.size} app${if (blockedApps.size != 1) "s" else ""} blocked",
+                text = if (blockedApps.isEmpty()) {
+                    "No apps blocked yet"
+                } else {
+                    "${blockedApps.size} app${if (blockedApps.size != 1) "s" else ""} blocked"
+                },
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
@@ -287,10 +291,21 @@ private fun HeroSummaryCard(
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = if (isAccessibilityEnabled) "Blocking is active" else "Blocking is inactive",
+                text = when {
+                    !isAccessibilityEnabled -> "Blocking is off"
+                    blockedApps.isEmpty() -> "Tap to choose the apps that distract you"
+                    else -> "Blocking is active"
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
+
+            if (!isAccessibilityEnabled) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(onClick = onTurnOnBlocking) {
+                    Text(text = "Turn on blocking")
+                }
+            }
 
             // Show up to 3 app icons in a row
             if (blockedApps.isNotEmpty()) {
@@ -401,18 +416,6 @@ private fun FeatureCard(
     }
 }
 
-@Composable
-private fun rememberAppIcon(packageName: String): ImageBitmap? {
-    val context = LocalContext.current
-    return remember(packageName) {
-        try {
-            val drawable: Drawable = context.packageManager.getApplicationIcon(packageName)
-            drawable.toBitmap(width = 96, height = 96).asImageBitmap()
-        } catch (_: Exception) {
-            null
-        }
-    }
-}
 
 // region Previews
 
@@ -433,8 +436,10 @@ private fun HomeScreenPreview() {
             nowMs = 0L,
             onStartFocus = {},
             onEndFocus = {},
+            onTurnOnBlocking = {},
             onNavigateToApps = {},
             onNavigateToSchedules = {},
+            onNavigateToActivity = {},
         )
     }
 }
@@ -450,8 +455,10 @@ private fun HomeScreenEmptyPreview() {
             nowMs = 0L,
             onStartFocus = {},
             onEndFocus = {},
+            onTurnOnBlocking = {},
             onNavigateToApps = {},
             onNavigateToSchedules = {},
+            onNavigateToActivity = {},
         )
     }
 }
@@ -472,8 +479,10 @@ private fun HomeScreenFocusActivePreview() {
             nowMs = now,
             onStartFocus = {},
             onEndFocus = {},
+            onTurnOnBlocking = {},
             onNavigateToApps = {},
             onNavigateToSchedules = {},
+            onNavigateToActivity = {},
         )
     }
 }

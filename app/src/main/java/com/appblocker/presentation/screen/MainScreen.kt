@@ -1,11 +1,8 @@
 package com.appblocker.presentation.screen
 
-import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.provider.Settings
-import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,7 +27,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,12 +36,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.appblocker.domain.model.BlockedApp
@@ -66,6 +59,8 @@ import kotlinx.coroutines.withContext
  */
 @Composable
 fun MainScreen(
+    isAccessibilityEnabled: Boolean,
+    onTurnOnBlocking: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val viewModel: MainViewModel = viewModel(
@@ -75,21 +70,11 @@ fun MainScreen(
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Accessibility service status -- re-checked on every resume
-    var isAccessibilityEnabled by rememberSaveable { mutableStateOf(true) }
+    // "Later" hides the banner until the app is next opened. It is never
+    // persisted: without the service nothing gets blocked, so the reminder
+    // must come back.
     var accessibilityPromptDismissed by rememberSaveable { mutableStateOf(false) }
-
-    LaunchedEffect(lifecycleOwner) {
-        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            isAccessibilityEnabled = checkAccessibilityService(context)
-            val prefs = context.getSharedPreferences(
-                "${context.packageName}_preferences", Context.MODE_PRIVATE
-            )
-            accessibilityPromptDismissed = prefs.getBoolean("accessibility_prompt_dismissed", false)
-        }
-    }
 
     // App picker bottom sheet state
     var showAppPicker by rememberSaveable { mutableStateOf(false) }
@@ -114,16 +99,8 @@ fun MainScreen(
             blockedApps = blockedApps,
             isLoading = isLoading,
             showAccessibilityBanner = !isAccessibilityEnabled && !accessibilityPromptDismissed,
-            onEnableAccessibility = {
-                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-            },
-            onDismissAccessibilityBanner = {
-                accessibilityPromptDismissed = true
-                val prefs = context.getSharedPreferences(
-                    "${context.packageName}_preferences", Context.MODE_PRIVATE
-                )
-                prefs.edit().putBoolean("accessibility_prompt_dismissed", true).apply()
-            },
+            onEnableAccessibility = onTurnOnBlocking,
+            onDismissAccessibilityBanner = { accessibilityPromptDismissed = true },
             onToggle = { packageName, enabled ->
                 viewModel.toggleAppBlocking(packageName, enabled)
             },
@@ -158,16 +135,6 @@ fun MainScreen(
             },
             onDismiss = { showAppPicker = false },
         )
-    }
-}
-
-private fun checkAccessibilityService(context: Context): Boolean {
-    val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-    val enabledServices = am.getEnabledAccessibilityServiceList(
-        AccessibilityServiceInfo.FEEDBACK_ALL_MASK
-    )
-    return enabledServices.any {
-        it.resolveInfo.serviceInfo.packageName == context.packageName
     }
 }
 
@@ -313,13 +280,13 @@ private fun AccessibilityBanner(
             modifier = Modifier.padding(16.dp),
         ) {
             Text(
-                text = "Accessibility Service Required",
+                text = "Blocking is off",
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onErrorContainer,
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "App Blocker needs the Accessibility Service to detect and block apps.",
+                text = "Apps on this list won't be blocked until you turn on App Blocker in Accessibility settings.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onErrorContainer,
             )
@@ -336,7 +303,7 @@ private fun AccessibilityBanner(
                 }
                 TextButton(onClick = onEnable) {
                     Text(
-                        text = "Enable",
+                        text = "Turn on",
                         color = MaterialTheme.colorScheme.onErrorContainer,
                     )
                 }

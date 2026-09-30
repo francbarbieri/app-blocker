@@ -67,6 +67,13 @@ private val pages = listOf(
         title = "Your rules, your schedule",
         subtitle = "Set time windows or daily limits. Stay in control without going cold turkey.",
     ),
+    OnboardingPageData(
+        visual = OnboardingVisual.PULSE_RING,
+        title = "One permission, one job",
+        subtitle = "Blocking uses Android's Accessibility service to notice which app opens. " +
+            "It never sees what's on your screen, and nothing leaves your phone. " +
+            "You'll turn it on from the Home screen next.",
+    ),
 )
 
 @Composable

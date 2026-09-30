@@ -1,13 +1,12 @@
 package com.appblocker.presentation.screen
 
-import android.accessibilityservice.AccessibilityServiceInfo
-import android.content.Context
-import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Security
@@ -21,7 +20,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -31,13 +29,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.appblocker.appContainer
 import com.appblocker.presentation.MainViewModel
+import com.appblocker.presentation.components.BlockingSetupDialog
+import com.appblocker.presentation.components.rememberBlockingServiceEnabled
 import com.appblocker.presentation.theme.AppBlockerTheme
 
 /**
@@ -63,6 +60,11 @@ enum class NavTab(
         selectedIcon = Icons.Filled.Schedule,
         unselectedIcon = Icons.Outlined.Schedule,
     ),
+    Activity(
+        label = "Activity",
+        selectedIcon = Icons.Filled.BarChart,
+        unselectedIcon = Icons.Outlined.BarChart,
+    ),
 }
 
 /**
@@ -82,17 +84,9 @@ fun AppNavigation(
     val focusSession by viewModel.focusSession.collectAsStateWithLifecycle()
     val nowMs by viewModel.now.collectAsStateWithLifecycle()
 
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-
-    // Accessibility service status -- re-checked on every resume
-    var isAccessibilityEnabled by rememberSaveable { mutableStateOf(true) }
-
-    LaunchedEffect(lifecycleOwner) {
-        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            isAccessibilityEnabled = checkAccessibilityServiceStatus(context)
-        }
-    }
+    // Checked immediately and re-checked on every resume (e.g. back from settings).
+    val isAccessibilityEnabled = rememberBlockingServiceEnabled()
+    var showSetupDialog by rememberSaveable { mutableStateOf(false) }
 
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
     val tabs = NavTab.entries
@@ -108,6 +102,7 @@ fun AppNavigation(
                             NavTab.Home -> "Home"
                             NavTab.Apps -> "Blocked Apps"
                             NavTab.Schedules -> "Schedules"
+                            NavTab.Activity -> "Activity"
                         },
                     )
                 },
@@ -149,14 +144,18 @@ fun AppNavigation(
                     nowMs = nowMs,
                     onStartFocus = viewModel::startFocusSession,
                     onEndFocus = viewModel::endFocusSession,
-                    onNavigateToApps = { selectedTabIndex = 1 },
-                    onNavigateToSchedules = { selectedTabIndex = 2 },
+                    onTurnOnBlocking = { showSetupDialog = true },
+                    onNavigateToApps = { selectedTabIndex = NavTab.Apps.ordinal },
+                    onNavigateToSchedules = { selectedTabIndex = NavTab.Schedules.ordinal },
+                    onNavigateToActivity = { selectedTabIndex = NavTab.Activity.ordinal },
                     modifier = Modifier.padding(innerPadding),
                 )
             }
 
             NavTab.Apps -> {
                 MainScreen(
+                    isAccessibilityEnabled = isAccessibilityEnabled,
+                    onTurnOnBlocking = { showSetupDialog = true },
                     modifier = Modifier.padding(innerPadding),
                 )
             }
@@ -166,17 +165,17 @@ fun AppNavigation(
                     modifier = Modifier.padding(innerPadding),
                 )
             }
+
+            NavTab.Activity -> {
+                ActivityScreen(
+                    modifier = Modifier.padding(innerPadding),
+                )
+            }
         }
     }
-}
 
-private fun checkAccessibilityServiceStatus(context: Context): Boolean {
-    val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-    val enabledServices = am.getEnabledAccessibilityServiceList(
-        AccessibilityServiceInfo.FEEDBACK_ALL_MASK
-    )
-    return enabledServices.any {
-        it.resolveInfo.serviceInfo.packageName == context.packageName
+    if (showSetupDialog) {
+        BlockingSetupDialog(onDismiss = { showSetupDialog = false })
     }
 }
 
