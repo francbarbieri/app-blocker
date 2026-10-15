@@ -15,6 +15,7 @@ import com.appblocker.domain.usecase.DeleteScheduleUseCase
 import com.appblocker.domain.usecase.EndFocusSessionUseCase
 import com.appblocker.domain.usecase.GetAllBlockedAppsUseCase
 import com.appblocker.domain.usecase.GetMotivationalMessageUseCase
+import com.appblocker.domain.usecase.GetTodayAppStatsUseCase
 import com.appblocker.domain.usecase.IsAppBlockedUseCase
 import com.appblocker.domain.usecase.IsAppOnActiveScheduleUseCase
 import com.appblocker.domain.usecase.IsFocusSessionActiveUseCase
@@ -76,6 +77,7 @@ class AppContainer(context: Context) {
 
     val recordUsageUseCase = RecordUsageUseCase(usageRepository, clock)
     val getMotivationalMessageUseCase = GetMotivationalMessageUseCase(motivationalMessageRepository)
+    val getTodayAppStatsUseCase = GetTodayAppStatsUseCase(usageRepository, clock)
 
     val observeLatestFocusSessionUseCase =
         ObserveLatestFocusSessionUseCase(focusSessionRepository)

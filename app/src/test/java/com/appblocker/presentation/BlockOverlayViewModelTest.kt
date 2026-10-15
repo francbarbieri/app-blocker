@@ -3,17 +3,22 @@ package com.appblocker.presentation
 import app.cash.turbine.test
 import com.appblocker.domain.model.DefaultMotivationalMessages
 import com.appblocker.domain.model.MotivationalMessage
+import com.appblocker.domain.model.TodayAppStats
+import com.appblocker.domain.model.UnblockEvent
 import com.appblocker.domain.model.UnblockOutcome
 import com.appblocker.domain.usecase.GetMotivationalMessageUseCase
+import com.appblocker.domain.usecase.GetTodayAppStatsUseCase
 import com.appblocker.domain.usecase.RecordUsageUseCase
 import com.appblocker.domain.util.Clock
 import com.appblocker.presentation.fakes.FakeMotivationalMessageRepository
 import com.appblocker.presentation.fakes.FakeUsageRepository
 import com.appblocker.presentation.screen.BlockOverlayEvent
 import com.appblocker.presentation.screen.BlockOverlayUiState
+import com.appblocker.presentation.screen.ReflectionStep
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -25,6 +30,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.time.ZoneOffset
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class BlockOverlayViewModelTest {
@@ -32,6 +38,7 @@ class BlockOverlayViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private val packageName = "com.example.app"
     private val appName = "Example"
+    private val now = 10 * 3_600_000L
 
     @Before
     fun setUp() {
@@ -48,80 +55,106 @@ class BlockOverlayViewModelTest {
         usageRepo: FakeUsageRepository = FakeUsageRepository()
     ): Pair<BlockOverlayViewModel, FakeUsageRepository> {
         val motivRepo = FakeMotivationalMessageRepository(nextMessage = message)
+        val clock = Clock { now }
         val vm = BlockOverlayViewModel(
             packageName = packageName,
             appName = appName,
-            recordUsage = RecordUsageUseCase(usageRepo, Clock { 0L }),
-            getMotivationalMessage = GetMotivationalMessageUseCase(motivRepo)
+            recordUsage = RecordUsageUseCase(usageRepo, clock),
+            getMotivationalMessage = GetMotivationalMessageUseCase(motivRepo),
+            getTodayAppStats = GetTodayAppStatsUseCase(usageRepo, clock, zoneProvider = { ZoneOffset.UTC }),
         )
         return vm to usageRepo
     }
 
-    @Test
-    fun `initial state is BreathingPause with 5 seconds remaining`() = runTest(dispatcher) {
-        val (vm, _) = viewModel()
-        assertEquals(BlockOverlayUiState.BreathingPause(appName, 5), vm.state.value)
+    private val BlockOverlayViewModel.reflection get() = state.value as BlockOverlayUiState.Reflection
+
+    /** Runs the whole reveal so the choices are unlocked. */
+    private fun TestScope.unlock() {
+        advanceTimeBy(60_000); runCurrent()
     }
 
     @Test
-    fun `countdown decrements secondsRemaining each second`() = runTest(dispatcher) {
+    fun `starts loading with nothing revealed`() = runTest(dispatcher) {
         val (vm, _) = viewModel()
-        advanceTimeBy(1_000); runCurrent()
-        assertEquals(BlockOverlayUiState.BreathingPause(appName, 4), vm.state.value)
-        advanceTimeBy(1_000); runCurrent()
-        assertEquals(BlockOverlayUiState.BreathingPause(appName, 3), vm.state.value)
-        advanceTimeBy(2_000); runCurrent()
-        assertEquals(BlockOverlayUiState.BreathingPause(appName, 1), vm.state.value)
+        assertEquals(ReflectionStep.LOADING, vm.reflection.step)
     }
 
     @Test
-    fun `countdown lands on secondsRemaining=0 at five seconds`() = runTest(dispatcher) {
-        val (vm, _) = viewModel()
-        advanceTimeBy(5_000); runCurrent()
-        assertEquals(BlockOverlayUiState.BreathingPause(appName, 0), vm.state.value)
+    fun `reveals attempts, then usage, then the choice after the pause`() = runTest(dispatcher) {
+        val usageRepo = FakeUsageRepository().apply { addSession(packageName, now - 120_000L, now) }
+        val (vm, _) = viewModel(usageRepo = usageRepo)
+
+        runCurrent()
+        assertEquals(ReflectionStep.ATTEMPTS, vm.reflection.step)
+        assertEquals(TodayAppStats(attempt = 1, usageMs = 120_000L), vm.reflection.stats)
+        assertEquals(5, vm.reflection.pauseSeconds)
+
+        advanceTimeBy(BlockOverlayViewModel.USAGE_LINE_DELAY_MS); runCurrent()
+        assertEquals(ReflectionStep.USAGE, vm.reflection.step)
+
+        advanceTimeBy(5_000 - BlockOverlayViewModel.USAGE_LINE_DELAY_MS - 1); runCurrent()
+        assertEquals(ReflectionStep.USAGE, vm.reflection.step)
+
+        advanceTimeBy(1); runCurrent()
+        assertEquals(ReflectionStep.DECIDE, vm.reflection.step)
     }
 
     @Test
-    fun `countdown transitions to Confirmation after the zero-hold`() = runTest(dispatcher) {
-        val (vm, _) = viewModel()
-        advanceUntilIdle()
-        assertEquals(BlockOverlayUiState.Confirmation(appName), vm.state.value)
-    }
-
-    @Test
-    fun `onSkipBreath transitions immediately to Confirmation and stops the countdown`() =
-        runTest(dispatcher) {
-            val (vm, _) = viewModel()
-            vm.onSkipBreath()
-            assertEquals(BlockOverlayUiState.Confirmation(appName), vm.state.value)
-            advanceTimeBy(10_000)
-            assertEquals(BlockOverlayUiState.Confirmation(appName), vm.state.value)
+    fun `pause grows with today's attempts`() = runTest(dispatcher) {
+        val usageRepo = FakeUsageRepository()
+        repeat(4) {
+            usageRepo.recordUnblockEvent(UnblockEvent(appPackageName = packageName, timestamp = now - 1_000L, outcome = UnblockOutcome.LEGITIMATE))
         }
+        val (vm, _) = viewModel(usageRepo = usageRepo)
+        runCurrent()
+
+        assertEquals(5, vm.reflection.stats?.attempt)
+        assertEquals(15, vm.reflection.pauseSeconds)
+
+        advanceTimeBy(14_999); runCurrent()
+        assertEquals(ReflectionStep.USAGE, vm.reflection.step)
+        advanceTimeBy(1); runCurrent()
+        assertEquals(ReflectionStep.DECIDE, vm.reflection.step)
+    }
 
     @Test
-    fun `onBreakingPlan after skip transitions to Motivational with the loaded message`() =
-        runTest(dispatcher) {
-            val (vm, _) = viewModel(
-                message = MotivationalMessage(
-                    id = 1,
-                    appPackageName = packageName,
-                    message = "Keep going",
-                    createdAt = 0L
-                )
-            )
-            vm.onSkipBreath()
+    fun `choices are ignored until the pause is over`() = runTest(dispatcher) {
+        val (vm, usageRepo) = viewModel()
+        vm.events.test {
+            runCurrent()
+            vm.onLegitimate()
             vm.onBreakingPlan()
-            advanceUntilIdle()
-            assertEquals(
-                BlockOverlayUiState.Motivational(appName, "Keep going"),
-                vm.state.value
-            )
+            advanceTimeBy(2_000); runCurrent()
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
         }
+        assertTrue(vm.state.value is BlockOverlayUiState.Reflection)
+        assertTrue(usageRepo.recordedEvents.isEmpty())
+    }
+
+    @Test
+    fun `onBreakingPlan transitions to Motivational with the loaded message`() = runTest(dispatcher) {
+        val (vm, _) = viewModel(
+            message = MotivationalMessage(
+                id = 1,
+                appPackageName = packageName,
+                message = "Keep going",
+                createdAt = 0L
+            )
+        )
+        unlock()
+        vm.onBreakingPlan()
+        advanceUntilIdle()
+        assertEquals(
+            BlockOverlayUiState.Motivational(appName, "Keep going", TodayAppStats(attempt = 1, usageMs = 0L)),
+            vm.state.value
+        )
+    }
 
     @Test
     fun `onBreakingPlan with no user message shows a built-in one`() = runTest(dispatcher) {
         val (vm, _) = viewModel(message = null)
-        vm.onSkipBreath()
+        unlock()
         vm.onBreakingPlan()
         advanceUntilIdle()
         val state = vm.state.value as BlockOverlayUiState.Motivational
@@ -129,9 +162,10 @@ class BlockOverlayViewModelTest {
     }
 
     @Test
-    fun `back during the breathing pause records BACKED_OFF and goes home`() = runTest(dispatcher) {
+    fun `back during the reveal records BACKED_OFF and goes home`() = runTest(dispatcher) {
         val (vm, usageRepo) = viewModel()
         vm.events.test {
+            runCurrent()
             vm.onDismissToHome()
             advanceUntilIdle()
             assertEquals(BlockOverlayEvent.GoHome, awaitItem())
@@ -143,7 +177,7 @@ class BlockOverlayViewModelTest {
     @Test
     fun `only the first decision is recorded`() = runTest(dispatcher) {
         val (vm, usageRepo) = viewModel()
-        vm.onSkipBreath()
+        unlock()
         vm.events.test {
             vm.onLegitimate()
             vm.onLegitimate()
@@ -159,7 +193,7 @@ class BlockOverlayViewModelTest {
     @Test
     fun `onLegitimate records LEGITIMATE and emits GrantGraceAndClose`() = runTest(dispatcher) {
         val (vm, usageRepo) = viewModel()
-        vm.onSkipBreath()
+        unlock()
         vm.events.test {
             vm.onLegitimate()
             advanceUntilIdle()
@@ -174,7 +208,7 @@ class BlockOverlayViewModelTest {
     @Test
     fun `onGoBack from Motivational records BACKED_OFF and emits GoHome`() = runTest(dispatcher) {
         val (vm, usageRepo) = viewModel()
-        vm.onSkipBreath()
+        unlock()
         vm.onBreakingPlan()
         advanceUntilIdle()
         vm.events.test {
@@ -191,7 +225,7 @@ class BlockOverlayViewModelTest {
     fun `onProceed from Motivational records BROKE_PLAN_PROCEEDED and emits GrantGraceAndClose`() =
         runTest(dispatcher) {
             val (vm, usageRepo) = viewModel()
-            vm.onSkipBreath()
+            unlock()
             vm.onBreakingPlan()
             advanceUntilIdle()
             vm.events.test {
@@ -205,18 +239,27 @@ class BlockOverlayViewModelTest {
         }
 
     @Test
-    fun `onBackPressedFromMotivational returns state to Confirmation`() = runTest(dispatcher) {
+    fun `onProceed outside Motivational does nothing`() = runTest(dispatcher) {
         val (vm, usageRepo) = viewModel()
-        vm.onSkipBreath()
+        unlock()
+        vm.onProceed()
+        advanceUntilIdle()
+        assertTrue(usageRepo.recordedEvents.isEmpty())
+    }
+
+    @Test
+    fun `onBackPressedFromMotivational returns to the unlocked reflection`() = runTest(dispatcher) {
+        val (vm, usageRepo) = viewModel()
+        unlock()
         vm.onBreakingPlan()
         advanceUntilIdle()
         assertTrue(vm.state.value is BlockOverlayUiState.Motivational)
 
         vm.onBackPressedFromMotivational()
 
-        assertEquals(BlockOverlayUiState.Confirmation(appName), vm.state.value)
+        assertEquals(ReflectionStep.DECIDE, vm.reflection.step)
         assertTrue(
-            "No event should be recorded on back-to-confirmation",
+            "No event should be recorded on back-to-reflection",
             usageRepo.recordedEvents.isEmpty()
         )
     }

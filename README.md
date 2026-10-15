@@ -52,8 +52,11 @@ APKs opened from a file manager or browser.
 - A **focus session** blocks every enabled app on the list, whatever the schedules say.
 - Schedules can be paused from the Schedules tab without deleting them.
 
-When a blocked app opens, App Blocker shows a short breathing pause and says why
-the app is blocked. "This is planned" and "Open anyway" give a 5-minute pass;
+When a blocked app opens, App Blocker shows which attempt today this is and how
+much time you've already spent in the app, one line at a time, and says why the
+app is blocked. The choices stay locked for a pause that grows with every attempt
+(5 s at first, 15 s on the fifth, up to 30 s), and there is no skip.
+"This is planned" and "Open anyway" give a 5-minute pass;
 after that the check-in comes back, even if you stayed in the app. Going back
 counts as walking away, and the **Activity** tab shows how often you did.
 

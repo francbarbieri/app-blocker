@@ -2,13 +2,10 @@ package com.appblocker.presentation.screen
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -18,15 +15,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,18 +37,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.appblocker.domain.model.BlockReason
+import com.appblocker.domain.model.TodayAppStats
 import com.appblocker.presentation.theme.AppBlockerTheme
 import kotlinx.coroutines.delay
 
@@ -60,7 +59,6 @@ fun BlockOverlayScreen(
     state: BlockOverlayUiState,
     reason: BlockReason?,
     graceMinutes: Int,
-    onSkipBreath: () -> Unit,
     onLegitimate: () -> Unit,
     onBreakingPlan: () -> Unit,
     onGoBack: () -> Unit,
@@ -95,22 +93,16 @@ fun BlockOverlayScreen(
                     label = "blockOverlayState",
                 ) { current ->
                     when (current) {
-                        is BlockOverlayUiState.BreathingPause -> BreathingPauseContent(
-                            appName = current.appName,
-                            secondsRemaining = current.secondsRemaining,
-                            reason = reason,
-                            onSkip = onSkipBreath,
-                        )
-                        is BlockOverlayUiState.Confirmation -> ConfirmationContent(
-                            appName = current.appName,
+                        is BlockOverlayUiState.Reflection -> ReflectionContent(
+                            state = current,
                             reason = reason,
                             graceMinutes = graceMinutes,
                             onLegitimate = onLegitimate,
                             onBreakingPlan = onBreakingPlan,
                         )
                         is BlockOverlayUiState.Motivational -> MotivationalContent(
-                            appName = current.appName,
                             message = current.message,
+                            stats = current.stats,
                             graceMinutes = graceMinutes,
                             onGoBack = onGoBack,
                             onProceed = onProceed,
@@ -122,161 +114,206 @@ fun BlockOverlayScreen(
     }
 }
 
+/**
+ * Today's attempts, then today's screen time, then (once the pause runs out)
+ * the choice. The big button never opens the app: tapping through on reflex
+ * lands on "I'm breaking my plan" and then "Stick to my plan".
+ */
 @Composable
-private fun BreathingPauseContent(
-    appName: String,
-    secondsRemaining: Int,
-    reason: BlockReason?,
-    onSkip: () -> Unit,
-) {
-    val breathing = rememberInfiniteTransition(label = "breathing")
-    val breathingAlpha by breathing.animateFloat(
-        initialValue = 0.4f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "breathingAlpha",
-    )
-
-    val animatedProgress by animateFloatAsState(
-        targetValue = secondsRemaining / 5f,
-        animationSpec = tween(1000, easing = LinearEasing),
-        label = "countdownProgress",
-    )
-
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = "Take a deep breath.",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center,
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "$appName will still be there in a moment.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-
-        if (reason != null) {
-            Spacer(modifier = Modifier.height(16.dp))
-            ReasonPill(reason = reason)
-        }
-
-        Spacer(modifier = Modifier.height(40.dp))
-
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.size(140.dp),
-        ) {
-            CircularProgressIndicator(
-                progress = { animatedProgress },
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                strokeWidth = 6.dp,
-            )
-            Text(
-                text = "$secondsRemaining",
-                style = MaterialTheme.typography.displayLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.semantics {
-                    liveRegion = LiveRegionMode.Polite
-                    contentDescription = "$secondsRemaining seconds remaining"
-                },
-            )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(
-            text = "Breathe in… and out.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.alpha(breathingAlpha),
-        )
-
-        Spacer(modifier = Modifier.height(48.dp))
-
-        TextButton(onClick = onSkip) {
-            Text(
-                text = "Skip",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ConfirmationContent(
-    appName: String,
+private fun ReflectionContent(
+    state: BlockOverlayUiState.Reflection,
     reason: BlockReason?,
     graceMinutes: Int,
     onLegitimate: () -> Unit,
     onBreakingPlan: () -> Unit,
 ) {
-    var titleDone by remember { mutableStateOf(false) }
-    var subtitleDone by remember { mutableStateOf(false) }
-    val buttonsAlpha by animateFloatAsState(
-        targetValue = if (subtitleDone) 1f else 0f,
-        animationSpec = tween(durationMillis = 500, delayMillis = 200),
-        label = "confirmButtonsAlpha",
-    )
+    val step = state.step
+    val stats = state.stats
+    // Back from the motivational step everything is already shown; don't replay it.
+    val animate = remember { step != ReflectionStep.DECIDE }
+    val decide = step == ReflectionStep.DECIDE
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        TypewriterText(
-            text = confirmationQuestion(reason),
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center,
-            onComplete = { titleDone = true },
-        )
+        Reveal(visible = step >= ReflectionStep.ATTEMPTS) {
+            if (stats != null) {
+                AttemptsLine(attempt = stats.attempt, appName = state.appName)
+            } else {
+                Text(
+                    text = "Take a moment before you decide.",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        if (stats != null) {
+            Spacer(modifier = Modifier.height(32.dp))
+            Reveal(visible = step >= ReflectionStep.USAGE) {
+                UsageLine(
+                    usageMs = stats.usageMs,
+                    appName = state.appName,
+                    countUp = animate,
+                    start = step >= ReflectionStep.USAGE,
+                )
+            }
+        }
 
-        TypewriterText(
-            text = appName,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            start = titleDone,
-            onComplete = { subtitleDone = true },
-        )
+        if (reason != null) {
+            Spacer(modifier = Modifier.height(24.dp))
+            Reveal(visible = step >= ReflectionStep.USAGE) {
+                ReasonPill(reason = reason)
+            }
+        }
 
         Spacer(modifier = Modifier.height(48.dp))
 
-        Button(
-            onClick = onLegitimate,
-            enabled = subtitleDone,
-            modifier = Modifier.alpha(buttonsAlpha),
-        ) {
-            Text(text = "This is planned")
+        Box(contentAlignment = Alignment.TopCenter) {
+            val choicesAlpha by animateFloatAsState(
+                targetValue = if (decide) 1f else 0f,
+                animationSpec = tween(durationMillis = 600),
+                label = "choicesAlpha",
+            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.alpha(choicesAlpha),
+            ) {
+                Text(
+                    text = confirmationQuestion(reason),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(
+                    onClick = onBreakingPlan,
+                    enabled = decide,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(text = "I'm breaking my plan")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(onClick = onLegitimate, enabled = decide) {
+                    Text(
+                        text = "This is planned",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = DIM_ALPHA),
+                    )
+                }
+                Text(
+                    text = "Opening gives you $graceMinutes minutes before the next check-in.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = DIM_ALPHA),
+                    textAlign = TextAlign.Center,
+                )
+            }
+            if (step == ReflectionStep.ATTEMPTS || step == ReflectionStep.USAGE) {
+                PauseProgress(pauseSeconds = state.pauseSeconds)
+            }
         }
+    }
+}
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        OutlinedButton(
-            onClick = onBreakingPlan,
-            enabled = subtitleDone,
-            modifier = Modifier.alpha(buttonsAlpha),
-        ) {
-            Text(text = "I'm breaking my plan")
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
+@Composable
+private fun AttemptsLine(attempt: Int, appName: String) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+    ) {
         Text(
-            text = "Opening gives you $graceMinutes minutes before the next check-in.",
-            style = MaterialTheme.typography.bodySmall,
+            text = ordinal(attempt),
+            style = MaterialTheme.typography.displayLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = "attempt to open $appName today",
+            style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
-            modifier = Modifier.alpha(buttonsAlpha),
         )
     }
+}
+
+/** Counts today's screen time up from zero, so the eye follows it. */
+@Composable
+private fun UsageLine(usageMs: Long, appName: String, countUp: Boolean, start: Boolean) {
+    val shown = remember { Animatable(if (countUp) 0f else usageMs.toFloat()) }
+    LaunchedEffect(start) {
+        if (start) {
+            shown.animateTo(
+                targetValue = usageMs.toFloat(),
+                animationSpec = tween(durationMillis = COUNT_UP_MS, easing = FastOutSlowInEasing),
+            )
+        }
+    }
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+    ) {
+        if (usageMs < 60_000L) {
+            Text(
+                text = "No time in $appName yet today.",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                text = "Keep it that way.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Text(
+                text = formatUsage(shown.value.toLong()),
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "already spent in $appName today",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+/** Fades and lifts [content] in when [visible] turns true; keeps its space before that. */
+@Composable
+private fun Reveal(visible: Boolean, content: @Composable () -> Unit) {
+    val progress by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(durationMillis = 700, easing = FastOutSlowInEasing),
+        label = "reveal",
+    )
+    Box(
+        modifier = Modifier.graphicsLayer {
+            alpha = progress
+            translationY = (1f - progress) * 24.dp.toPx()
+        },
+    ) {
+        content()
+    }
+}
+
+/** A thin bar that fills over the pause, so the wait reads as deliberate. */
+@Composable
+private fun PauseProgress(pauseSeconds: Int) {
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(pauseSeconds) {
+        progress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = pauseSeconds * 1000, easing = LinearEasing),
+        )
+    }
+    LinearProgressIndicator(
+        progress = { progress.value },
+        modifier = Modifier.width(120.dp),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+        drawStopIndicator = {},
+    )
 }
 
 @Composable
@@ -305,7 +342,19 @@ internal fun describeBlockReason(reason: BlockReason): String = when (reason) {
         "Daily limit of ${formatMinutesLabel(reason.limitMinutes)} reached"
 }
 
-// The two answers ("This is planned" / "I'm breaking my plan") are statements,
+/** "1st", "2nd", "3rd", "4th", "11th", "22nd". */
+internal fun ordinal(n: Int): String {
+    val suffix = when {
+        n % 100 in 11..13 -> "th"
+        n % 10 == 1 -> "st"
+        n % 10 == 2 -> "nd"
+        n % 10 == 3 -> "rd"
+        else -> "th"
+    }
+    return "$n$suffix"
+}
+
+// The two answers ("I'm breaking my plan" / "This is planned") are statements,
 // not yes/no replies, so every question below reads correctly with them.
 private fun confirmationQuestion(reason: BlockReason?): String = when (reason) {
     BlockReason.FocusSession -> "You're in a focus session. Is this planned?"
@@ -352,16 +401,19 @@ private fun TypewriterText(
     )
 }
 
+/**
+ * The last stop before opening the app. "Stick to my plan" sits where
+ * "I'm breaking my plan" was, so a reflexive second tap goes home.
+ */
 @Composable
 private fun MotivationalContent(
-    appName: String,
     message: String,
+    stats: TodayAppStats?,
     graceMinutes: Int,
     onGoBack: () -> Unit,
     onProceed: () -> Unit,
 ) {
     var titleDone by remember { mutableStateOf(false) }
-    var subtitleDone by remember { mutableStateOf(false) }
     var messageDone by remember { mutableStateOf(false) }
     val buttonsAlpha by animateFloatAsState(
         targetValue = if (messageDone) 1f else 0f,
@@ -371,44 +423,49 @@ private fun MotivationalContent(
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         TypewriterText(
-            text = "This app is blocked",
+            text = "You're about to break your plan.",
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
             onComplete = { titleDone = true },
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        TypewriterText(
-            text = appName,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            start = titleDone,
-            onComplete = { subtitleDone = true },
         )
 
         Spacer(modifier = Modifier.height(32.dp))
 
         TypewriterText(
-            text = message,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
+            text = "“$message”",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.primary,
             textAlign = TextAlign.Center,
-            start = subtitleDone,
+            delayPerCharMs = 45L,
+            start = titleDone,
             onComplete = { messageDone = true },
         )
+
+        if (stats != null) {
+            Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                text = "${ordinal(stats.attempt)} attempt today · ${formatUsage(stats.usageMs)} already spent",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.alpha(buttonsAlpha),
+            )
+        }
 
         Spacer(modifier = Modifier.height(48.dp))
 
         Button(
             onClick = onGoBack,
             enabled = messageDone,
-            modifier = Modifier.alpha(buttonsAlpha),
+            modifier = Modifier
+                .fillMaxWidth()
+                .alpha(buttonsAlpha),
         ) {
-            Text(text = "Go Back")
+            Text(text = "Stick to my plan")
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         TextButton(
             onClick = onProceed,
@@ -417,21 +474,30 @@ private fun MotivationalContent(
         ) {
             Text(
                 text = "Open anyway for $graceMinutes min",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = DIM_ALPHA),
             )
         }
     }
 }
 
-@Preview(showBackground = true)
+private const val DIM_ALPHA = 0.6f
+private const val COUNT_UP_MS = 1_500
+
+private val previewStats = TodayAppStats(attempt = 7, usageMs = 134 * 60_000L)
+
+@Preview(showBackground = true, uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
 @Composable
-private fun BreathingPausePreview() {
+private fun ReflectionPausePreview() {
     AppBlockerTheme {
         BlockOverlayScreen(
-            state = BlockOverlayUiState.BreathingPause(appName = "Instagram", secondsRemaining = 4),
+            state = BlockOverlayUiState.Reflection(
+                appName = "Instagram",
+                stats = previewStats,
+                step = ReflectionStep.USAGE,
+                pauseSeconds = 21,
+            ),
             reason = BlockReason.ScheduledWindow(until = "17:00"),
             graceMinutes = 5,
-            onSkipBreath = {},
             onLegitimate = {},
             onBreakingPlan = {},
             onGoBack = {},
@@ -442,30 +508,17 @@ private fun BreathingPausePreview() {
 
 @Preview(showBackground = true, uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
 @Composable
-private fun BreathingPauseDarkPreview() {
+private fun ReflectionDecidePreview() {
     AppBlockerTheme {
         BlockOverlayScreen(
-            state = BlockOverlayUiState.BreathingPause(appName = "Instagram", secondsRemaining = 4),
-            reason = BlockReason.ScheduledWindow(until = "17:00"),
-            graceMinutes = 5,
-            onSkipBreath = {},
-            onLegitimate = {},
-            onBreakingPlan = {},
-            onGoBack = {},
-            onProceed = {},
-        )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun ConfirmationPreview() {
-    AppBlockerTheme {
-        BlockOverlayScreen(
-            state = BlockOverlayUiState.Confirmation(appName = "Instagram"),
+            state = BlockOverlayUiState.Reflection(
+                appName = "Instagram",
+                stats = previewStats,
+                step = ReflectionStep.DECIDE,
+                pauseSeconds = 21,
+            ),
             reason = BlockReason.DailyLimitReached(limitMinutes = 30),
             graceMinutes = 5,
-            onSkipBreath = {},
             onLegitimate = {},
             onBreakingPlan = {},
             onGoBack = {},
@@ -475,54 +528,17 @@ private fun ConfirmationPreview() {
 }
 
 @Preview(showBackground = true, uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
-@Composable
-private fun ConfirmationDarkPreview() {
-    AppBlockerTheme {
-        BlockOverlayScreen(
-            state = BlockOverlayUiState.Confirmation(appName = "Instagram"),
-            reason = BlockReason.DailyLimitReached(limitMinutes = 30),
-            graceMinutes = 5,
-            onSkipBreath = {},
-            onLegitimate = {},
-            onBreakingPlan = {},
-            onGoBack = {},
-            onProceed = {},
-        )
-    }
-}
-
-@Preview(showBackground = true)
 @Composable
 private fun MotivationalPreview() {
     AppBlockerTheme {
         BlockOverlayScreen(
             state = BlockOverlayUiState.Motivational(
                 appName = "Instagram",
-                message = "You've got this. Every moment you resist builds the life you want.",
+                message = "You set this limit for a reason. Future you will be glad you kept it.",
+                stats = previewStats,
             ),
             reason = BlockReason.FocusSession,
             graceMinutes = 5,
-            onSkipBreath = {},
-            onLegitimate = {},
-            onBreakingPlan = {},
-            onGoBack = {},
-            onProceed = {},
-        )
-    }
-}
-
-@Preview(showBackground = true, uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
-@Composable
-private fun MotivationalDarkPreview() {
-    AppBlockerTheme {
-        BlockOverlayScreen(
-            state = BlockOverlayUiState.Motivational(
-                appName = "Instagram",
-                message = "You've got this. Every moment you resist builds the life you want.",
-            ),
-            reason = BlockReason.FocusSession,
-            graceMinutes = 5,
-            onSkipBreath = {},
             onLegitimate = {},
             onBreakingPlan = {},
             onGoBack = {},

@@ -83,7 +83,8 @@ class BlockOverlayActivity : ComponentActivity() {
             packageName = blockedPackage,
             appName = intent.getStringExtra(EXTRA_APP_NAME) ?: blockedPackage,
             recordUsage = container.recordUsageUseCase,
-            getMotivationalMessage = container.getMotivationalMessageUseCase
+            getMotivationalMessage = container.getMotivationalMessageUseCase,
+            getTodayAppStats = container.getTodayAppStatsUseCase,
         )
     }
 
@@ -100,8 +101,7 @@ class BlockOverlayActivity : ComponentActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 when (viewModel.state.value) {
-                    is BlockOverlayUiState.BreathingPause,
-                    is BlockOverlayUiState.Confirmation -> viewModel.onDismissToHome()
+                    is BlockOverlayUiState.Reflection -> viewModel.onDismissToHome()
                     is BlockOverlayUiState.Motivational -> viewModel.onBackPressedFromMotivational()
                 }
             }
@@ -129,7 +129,6 @@ class BlockOverlayActivity : ComponentActivity() {
                     state = state,
                     reason = reason,
                     graceMinutes = (AppBlockerAccessibilityService.GRACE_PERIOD_MS / 60_000L).toInt(),
-                    onSkipBreath = viewModel::onSkipBreath,
                     onLegitimate = viewModel::onLegitimate,
                     onBreakingPlan = viewModel::onBreakingPlan,
                     onGoBack = viewModel::onGoBack,
